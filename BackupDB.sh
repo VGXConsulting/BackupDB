@@ -3,7 +3,7 @@
 # Database Backup Script with Git Upload
 # Copyright (c) 2025 VGX Consulting by Vijendra Malhotra. All rights reserved.
 # 
-# Version: 4.0
+# Version: 4.1
 # Modified: July 22, 2025
 #
 # DESCRIPTION:
@@ -89,6 +89,37 @@ username=( "your-db-user-1" "your-db-user-2" "your-db-user-3" )
 # SECURITY NOTE: Consider using environment variables or secure password management
 # rather than hardcoding passwords here
 password=( "your-db-password-1" "your-db-password-2" "your-db-password-3" )
+
+# Color codes for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+# Logging function with color support
+logme() {
+    local level=$1
+    shift
+    local message="$*"
+    
+    case $level in
+        "ERROR")
+            echo -e "${RED}[ERROR] $message${NC}"
+            ;;
+        "WARNING")
+            echo -e "${YELLOW}[WARNING] $message${NC}"
+            ;;
+        "SUCCESS")
+            echo -e "${GREEN}[SUCCESS] $message${NC}"
+            ;;
+        "INFO")
+            echo "[INFO] $message"
+            ;;
+        *)
+            echo "$level $message"
+            ;;
+    esac
+}
 
 # Enhanced OS detection
 if [[ "$OSTYPE" == "darwin"* ]]; then
@@ -185,7 +216,7 @@ install_dependency() {
         fi
         return $?
     else
-        echo "[WARNING] Could not determine installation command for $dep on $OS_TYPE with $PACKAGE_MANAGER"
+        logme WARNING "Could not determine installation command for $dep on $OS_TYPE with $PACKAGE_MANAGER"
         return 1
     fi
 }
@@ -229,7 +260,7 @@ provide_install_instructions() {
             esac
             ;;
         *)
-            echo "  [ERROR] Unknown package manager. Please install $dep manually."
+            logme ERROR "Unknown package manager. Please install $dep manually."
             ;;
     esac
 }
@@ -267,7 +298,7 @@ check_dependencies() {
     
     # Handle missing dependencies
     if [[ ${#missing_deps[@]} -gt 0 ]]; then
-        echo "[WARNING] Missing dependencies detected: ${missing_deps[*]}"
+        logme WARNING "Missing dependencies detected: ${missing_deps[*]}"
         
         if check_elevated_permissions; then
             echo "[INFO] Running with elevated permissions."
@@ -283,8 +314,8 @@ check_dependencies() {
                 done
                 
                 if $install_failed; then
-                    echo "[ERROR] Some dependencies failed to install automatically."
-                    echo "[ERROR] Please install them manually and run the script again."
+                    logme ERROR "Some dependencies failed to install automatically."
+                    logme ERROR "Please install them manually and run the script again."
                     exit 1
                 fi
                 
@@ -302,14 +333,14 @@ check_dependencies() {
             fi
         else
             echo "[INFO] No elevated permissions detected."
-            echo "[ERROR] Please install the missing dependencies and run the script again."
+            logme ERROR "Please install the missing dependencies and run the script again."
             for dep in "${missing_deps[@]}"; do
                 provide_install_instructions "$dep"
             done
             exit 1
         fi
     else
-        echo "[SUCCESS] All required dependencies are installed."
+        logme SUCCESS "All required dependencies are installed."
         
         # Ensure git-lfs is initialized even if already installed
         if command -v "git" >/dev/null 2>&1 && git lfs version >/dev/null 2>&1; then
@@ -336,7 +367,7 @@ add_lfs_pattern() {
 #########################
 
 echo "======================================================================"
-echo "DATABASE BACKUP SCRIPT v4.0 "
+echo "DATABASE BACKUP SCRIPT v4.1"
 echo "Copyright (c) 2025 VGX Consulting https://vgx.digital"
 echo
 echo "Starting backup process at $(date)"
@@ -351,16 +382,16 @@ if [ ! -d "$opath/.git" ]; then
   mkdir -p "$opath"
   git clone "$git_repo" "$opath"
   if [ $? -ne 0 ]; then
-    echo "[ERROR] Failed to clone Git repository. Please check your Git URL and SSH keys."
+    logme ERROR "Failed to clone Git repository. Please check your Git URL and SSH keys."
     exit 1
   fi
 fi
 
 # Step 2: Update local repository
 echo "[INFO] Updating local Git repository..."
-cd "$opath" || { echo "[ERROR] Failed to change to backup directory '$opath'"; exit 1; }
+cd "$opath" || { logme ERROR "Failed to change to backup directory '$opath'"; exit 1; }
 if ! git pull; then
-    echo "[WARNING] Failed to pull from remote repository. Continuing with local state..."
+    logme WARNING "Failed to pull from remote repository. Continuing with local state..."
 fi
 
 # Step 3: Clean up old backups (older than 5 days)
@@ -375,7 +406,7 @@ for (( i = 0; i < ${#mysqlhost[@]}; i++ )); do
     # Test connection before proceeding
     mysql -h "${mysqlhost[$i]}" -P "${mysqlport[$i]}" -u "${username[$i]}" -p"${password[$i]}" -e "SELECT 1;" > /dev/null 2>&1
     if [ $? -ne 0 ]; then
-        echo "[ERROR] Failed to connect to ${mysqlhost[$i]}. Skipping this host."
+        logme ERROR "Failed to connect to ${mysqlhost[$i]}. Skipping this host."
         continue
     fi
 
@@ -394,7 +425,7 @@ for (( i = 0; i < ${#mysqlhost[@]}; i++ )); do
           > "$backup_file" 2>/dev/null
 
         if [ ! -s "$backup_file" ]; then
-            echo "[WARNING] Backup file $backup_file is empty. Skipping..."
+            logme WARNING "Backup file $backup_file is empty. Skipping..."
             rm -f "$backup_file"
             continue
         fi
@@ -433,7 +464,7 @@ done
 [[ -f "$opath/.gitattributes" ]] && git add .gitattributes 2>/dev/null
 
 # Step 5: Commit and push changes to Git repository
-cd "$opath" || { echo "[ERROR] Failed to change to backup directory"; exit 1; }
+cd "$opath" || { logme ERROR "Failed to change to backup directory"; exit 1; }
 if git status --porcelain | grep -q '.'; then
     echo "[INFO] Changes detected. Committing and pushing to GitHub..."
 
@@ -444,7 +475,7 @@ if git status --porcelain | grep -q '.'; then
     current_branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "main")
     git push origin "$current_branch"
     if [ $? -ne 0 ]; then
-        echo "[ERROR] Failed to push to Git repository. Please check your connectivity and permissions."
+        logme ERROR "Failed to push to Git repository. Please check your connectivity and permissions."
         exit 1
     fi
 else
