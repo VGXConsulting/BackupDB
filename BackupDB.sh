@@ -3,7 +3,7 @@
 # Database Backup Script with Git Upload
 # Copyright (c) 2025 VGX Consulting by Vijendra Malhotra. All rights reserved.
 # 
-# Version: 4.1
+# Version: 4.2
 # Modified: July 22, 2025
 #
 # DESCRIPTION:
@@ -59,36 +59,53 @@
 # CONFIGURATION SETTINGS #
 #######################
 
+#######################
+# CONFIGURATION PRIORITY: Environment Variables > Local Values #
+#######################
+
 # Backup storage directory
+# Environment variable: VGX_DB_OPATH
 # Change this to your preferred backup location
-opath=$HOME/DBBackup/
+opath=${VGX_DB_OPATH:-"$HOME/DBBackup/"}
 
 # Git repository for storing backups
+# Environment variable: VGX_DB_GIT_REPO
 # Replace with your own repository URL
 # IMPORTANT: Use SSH format (git@github.com:username/repo.git)
-git_repo="git@github.com:YourUsername/DBBackups.git"
+git_repo=${VGX_DB_GIT_REPO:-"git@github.com:YourUsername/DBBackups.git"}
 
 # Database connection information
+# Environment variables: VGX_DB_HOSTS, VGX_DB_PORTS, VGX_DB_USERS, VGX_DB_PASSWORDS
 # NOTE: You must replace these example values with your actual database information
-# Example structure (Add all your database hosts in the array below):
-# mysqlhost=( "db1.example.com" "db2.example.com" "db3.example.com" )
-mysqlhost=( "your-db-host-1" "your-db-host-2" "your-db-host-3" )
+# For environment variables, use comma-separated values: "host1,host2,host3"
 
-# Database ports
-# Add corresponding ports for each database host
-# Usually 3306 for MySQL, but may vary depending on your setup
-mysqlport=( "3306" "3306" "3306" )
+# Parse environment variables or use defaults
+if [[ -n "$VGX_DB_HOSTS" ]]; then
+    IFS=',' read -ra mysqlhost <<< "$VGX_DB_HOSTS"
+else
+    mysqlhost=( "your-db-host-1" "your-db-host-2" "your-db-host-3" )
+fi
 
-# Database usernames
-# Add corresponding usernames for each database host
-# IMPORTANT: Ensure these accounts have proper backup privileges
-username=( "your-db-user-1" "your-db-user-2" "your-db-user-3" )
+if [[ -n "$VGX_DB_PORTS" ]]; then
+    IFS=',' read -ra mysqlport <<< "$VGX_DB_PORTS"
+else
+    # Usually 3306 for MySQL, but may vary depending on your setup
+    mysqlport=( "3306" "3306" "3306" )
+fi
 
-# Database passwords
-# Add corresponding passwords for each database host
-# SECURITY NOTE: Consider using environment variables or secure password management
-# rather than hardcoding passwords here
-password=( "your-db-password-1" "your-db-password-2" "your-db-password-3" )
+if [[ -n "$VGX_DB_USERS" ]]; then
+    IFS=',' read -ra username <<< "$VGX_DB_USERS"
+else
+    # IMPORTANT: Ensure these accounts have proper backup privileges
+    username=( "your-db-user-1" "your-db-user-2" "your-db-user-3" )
+fi
+
+if [[ -n "$VGX_DB_PASSWORDS" ]]; then
+    IFS=',' read -ra password <<< "$VGX_DB_PASSWORDS"
+else
+    # SECURITY NOTE: Consider using environment variables for secure password management
+    password=( "your-db-password-1" "your-db-password-2" "your-db-password-3" )
+fi
 
 # Color codes for output
 RED='\033[0;31m'
@@ -119,6 +136,16 @@ logme() {
             echo "$level $message"
             ;;
     esac
+}
+
+# Function to display configuration source
+show_config() {
+    echo "[CONFIG] Configuration loaded from:"
+    echo "  Backup Path: $([ -n "$VGX_DB_OPATH" ] && echo "VGX_DB_OPATH" || echo "script default") -> $opath"
+    echo "  Git Repo: $([ -n "$VGX_DB_GIT_REPO" ] && echo "VGX_DB_GIT_REPO" || echo "script default") -> $git_repo"
+    echo "  DB Hosts: $([ -n "$VGX_DB_HOSTS" ] && echo "VGX_DB_HOSTS" || echo "script default") -> ${mysqlhost[*]}"
+    echo "  DB Users: $([ -n "$VGX_DB_USERS" ] && echo "VGX_DB_USERS" || echo "script default") -> ${username[*]}"
+    echo "  Credentials: $([ -n "$VGX_DB_PASSWORDS" ] && echo "VGX_DB_PASSWORDS (secured)" || echo "script default (insecure)")"
 }
 
 # Enhanced OS detection
@@ -367,13 +394,17 @@ add_lfs_pattern() {
 #########################
 
 echo "======================================================================"
-echo "DATABASE BACKUP SCRIPT v4.1"
+echo "DATABASE BACKUP SCRIPT v4.2"
 echo "Copyright (c) 2025 VGX Consulting https://vgx.digital"
 echo
 echo "Starting backup process at $(date)"
 echo "======================================================================"
 
-# Step 0: Check system dependencies
+# Step 0a: Show configuration
+show_config
+echo
+
+# Step 0b: Check system dependencies
 check_dependencies
 
 # Step 1: Ensure Git repository exists or clone it
