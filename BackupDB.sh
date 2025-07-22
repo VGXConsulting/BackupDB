@@ -3,7 +3,7 @@
 # Database Backup Script with Git Upload
 # Copyright (c) 2025 VGX Consulting by Vijendra Malhotra. All rights reserved.
 # 
-# Version: 4.3
+# Version: 4.5
 # Modified: July 22, 2025
 #
 # DESCRIPTION:
@@ -394,7 +394,7 @@ add_lfs_pattern() {
 #########################
 
 echo "======================================================================"
-echo "DATABASE BACKUP SCRIPT v4.3"
+echo "DATABASE BACKUP SCRIPT v4.5"
 echo "Copyright (c) 2025 VGX Consulting https://vgx.digital"
 echo
 echo "Starting backup process at $(date)"
@@ -491,8 +491,16 @@ find "$opath" -name "*.gz" -size +100M 2>/dev/null | while read -r file; do
     add_lfs_pattern "$db_name/*.gz"
 done
 
-# Add .gitattributes if it exists
-[[ -f "$opath/.gitattributes" ]] && git add .gitattributes 2>/dev/null
+# Add and commit .gitattributes first if it exists (required for LFS to work)
+if [[ -f "$opath/.gitattributes" ]]; then
+    git add .gitattributes 2>/dev/null
+    if git diff --cached --quiet; then
+        echo "[INFO] .gitattributes unchanged, no commit needed."
+    else
+        echo "[INFO] Committing .gitattributes for LFS tracking..."
+        git commit -m "Update LFS tracking patterns"
+    fi
+fi
 
 # Step 5: Commit and push changes to Git repository
 cd "$opath" || { logme ERROR "Failed to change to backup directory"; exit 1; }
