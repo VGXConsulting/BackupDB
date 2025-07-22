@@ -7,6 +7,63 @@ This file tracks version changes and improvements made to the BackupDB script.
 2. Startup banner (around line 397): `echo "DATABASE BACKUP SCRIPT vX.X"`
 3. Add entry to this CLAUDE.md file
 
+## Version 5.0 (2025-07-22)
+
+### Major Feature: Multi-Storage Backend Support
+- **Storage Options**: Added support for Git, AWS S3, and Microsoft OneDrive storage backends
+- **Storage Configuration**: New environment variable `VGX_DB_STORAGE_TYPE` (options: git, s3, onedrive)
+- **Storage-Specific Settings**: 
+  - Git: `VGX_DB_GIT_REPO` (unchanged from previous versions)
+  - S3: `AWS_S3_BUCKET`, `AWS_S3_PREFIX` for bucket and path configuration
+  - OneDrive: `ONEDRIVE_REMOTE`, `ONEDRIVE_PATH` for rclone integration
+
+### Key Architecture Changes
+- **Storage Abstraction**: Refactored upload logic into storage-agnostic functions
+  - `upload_to_git()` - Git repository with LFS support
+  - `upload_to_s3()` - AWS S3 with automatic retention management
+  - `upload_to_onedrive()` - OneDrive via rclone with organized folder structure
+- **Smart Dependencies**: Only checks and installs dependencies based on selected storage type
+- **Cleanup Strategy**: Git keeps local files, object storage removes local files after successful upload
+- **Backward Compatibility**: Git remains the default storage type for existing deployments
+
+### Enhanced Features
+- **Dynamic Dependency Management**: Installs aws-cli for S3, rclone for OneDrive based on storage selection
+- **Storage Validation**: Pre-flight checks for storage credentials and connectivity
+- **S3-Compatible Support**: Full support for Backblaze B2, Wasabi, DigitalOcean Spaces, MinIO with endpoint URLs
+- **Comprehensive OneDrive Auth**: Detailed setup for personal, business, SharePoint, and enterprise scenarios
+- **Built-in Help System**: Interactive help with `--help`, `--version`, and `--test-config` commands
+- **Organized Storage**: S3 and OneDrive use date-based folder structure for better organization
+- **Automatic Retention**: Object storage backends implement 30-day retention policies
+- **Enhanced Configuration Display**: Shows active storage backend and configuration sources
+
+### Usage Examples
+```bash
+# Default Git storage (backward compatible)
+./BackupDB.sh
+
+# AWS S3 storage
+export VGX_DB_STORAGE_TYPE="s3"
+export AWS_S3_BUCKET="my-db-backups"
+export AWS_S3_PREFIX="prod-backups/"
+./BackupDB.sh
+
+# OneDrive storage
+export VGX_DB_STORAGE_TYPE="onedrive"
+export ONEDRIVE_REMOTE="onedrive"
+export ONEDRIVE_PATH="/DatabaseBackups"
+./BackupDB.sh
+
+# Backblaze B2 storage
+export VGX_DB_STORAGE_TYPE="s3"
+export AWS_ENDPOINT_URL="https://s3.us-west-002.backblazeb2.com"
+export AWS_S3_BUCKET="my-b2-bucket"
+./BackupDB.sh
+
+# Built-in help and testing
+./BackupDB.sh --help
+./BackupDB.sh --test-config
+```
+
 ## Version 4.2 (2025-07-22)
 
 ### Major Feature: Environment Variable Support
