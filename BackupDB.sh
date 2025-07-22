@@ -3,7 +3,7 @@
 # Database Backup Script with Git Upload
 # Copyright (c) 2025 VGX Consulting by Vijendra Malhotra. All rights reserved.
 # 
-# Version: 4.2
+# Version: 4.3
 # Modified: July 22, 2025
 #
 # DESCRIPTION:
@@ -209,33 +209,33 @@ install_dependency() {
             ;;
         "apt")
             case $dep in
-                "mysql") install_cmd="apt-get update && apt-get install -y mysql-client" ;;
-                "git") install_cmd="apt-get update && apt-get install -y git" ;;
-                "git-lfs") install_cmd="apt-get update && apt-get install -y git-lfs" ;;
-                *) install_cmd="apt-get update && apt-get install -y $dep" ;;
+                "mysql") install_cmd="sudo apt-get update && sudo apt-get install -y mysql-client" ;;
+                "git") install_cmd="sudo apt-get update && sudo apt-get install -y git" ;;
+                "git-lfs") install_cmd="sudo apt-get update && sudo apt-get install -y git-lfs" ;;
+                *) install_cmd="sudo apt-get update && sudo apt-get install -y $dep" ;;
             esac
             ;;
         "yum"|"dnf")
             case $dep in
-                "mysql") install_cmd="$PACKAGE_MANAGER install -y mysql" ;;
-                "git") install_cmd="$PACKAGE_MANAGER install -y git" ;;
-                "git-lfs") install_cmd="$PACKAGE_MANAGER install -y git-lfs" ;;
-                *) install_cmd="$PACKAGE_MANAGER install -y $dep" ;;
+                "mysql") install_cmd="sudo $PACKAGE_MANAGER install -y mysql" ;;
+                "git") install_cmd="sudo $PACKAGE_MANAGER install -y git" ;;
+                "git-lfs") install_cmd="sudo $PACKAGE_MANAGER install -y git-lfs" ;;
+                *) install_cmd="sudo $PACKAGE_MANAGER install -y $dep" ;;
             esac
             ;;
         "zypper")
             case $dep in
-                "mysql") install_cmd="zypper install -y mysql-client" ;;
-                "git") install_cmd="zypper install -y git" ;;
-                "git-lfs") install_cmd="zypper install -y git-lfs" ;;
-                *) install_cmd="zypper install -y $dep" ;;
+                "mysql") install_cmd="sudo zypper install -y mysql-client" ;;
+                "git") install_cmd="sudo zypper install -y git" ;;
+                "git-lfs") install_cmd="sudo zypper install -y git-lfs" ;;
+                *) install_cmd="sudo zypper install -y $dep" ;;
             esac
             ;;
     esac
     
     if [[ -n "$install_cmd" ]]; then
         echo "[INFO] Installing $dep using: $install_cmd"
-        if check_elevated_permissions; then
+        if check_elevated_permissions || [[ "$install_cmd" == *"sudo "* ]]; then
             bash -c "$install_cmd"
         else
             echo "[INFO] Running with sudo: sudo $install_cmd"
@@ -394,7 +394,7 @@ add_lfs_pattern() {
 #########################
 
 echo "======================================================================"
-echo "DATABASE BACKUP SCRIPT v4.2"
+echo "DATABASE BACKUP SCRIPT v4.3"
 echo "Copyright (c) 2025 VGX Consulting https://vgx.digital"
 echo
 echo "Starting backup process at $(date)"
