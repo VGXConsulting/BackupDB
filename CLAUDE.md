@@ -4,8 +4,34 @@ This file tracks version changes and improvements made to the BackupDB script.
 
 **REMINDER: When making changes to BackupDB.sh, always update the version number in:**
 1. Script header (line 6): `# Version: X.X`
-2. Startup banner (around line 370): `echo "DATABASE BACKUP SCRIPT vX.X"`
+2. Startup banner (around line 397): `echo "DATABASE BACKUP SCRIPT vX.X"`
 3. Add entry to this CLAUDE.md file
+
+## Version 4.2 (2025-07-22)
+
+### Major Feature: Environment Variable Support
+- **Secure Configuration**: Script now prioritizes environment variables over hardcoded values
+- **Environment Variables**: 
+  - `VGX_DB_OPATH` - Backup directory path
+  - `VGX_DB_GIT_REPO` - Git repository URL
+  - `VGX_DB_HOSTS` - Database hosts (comma-separated)
+  - `VGX_DB_PORTS` - Database ports (comma-separated)  
+  - `VGX_DB_USERS` - Database usernames (comma-separated)
+  - `VGX_DB_PASSWORDS` - Database passwords (comma-separated)
+
+### Testing & Security Benefits
+- **Easy Testing**: No need to modify script for different environments
+- **Security**: Passwords can be stored in environment variables instead of script
+- **Configuration Display**: Shows source of each configuration value at startup
+- **Fallback Support**: Uses script defaults if environment variables not set
+
+### Usage Example
+```bash
+export VGX_DB_HOSTS="db1.example.com,db2.example.com"
+export VGX_DB_USERS="backup_user1,backup_user2"
+export VGX_DB_PASSWORDS="secret1,secret2"
+./BackupDB.sh
+```
 
 ## Version 4.1 (2025-07-22)
 
