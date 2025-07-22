@@ -3,14 +3,15 @@
 # Database Backup Script with Git Upload
 # Copyright (c) 2025 VGX Consulting by Vijendra Malhotra. All rights reserved.
 # 
-# Version: 3.5
-# Modified: April 20, 2025
+# Version: 4.0
+# Modified: July 22, 2025
 #
 # DESCRIPTION:
 # This script automates MySQL database backups for multiple database hosts,
 # compresses the backups, and uploads them to a Git repository for versioning.
 # It only uploads new backups if changes are detected from the previous day.
 ###############################################################################
+
 
 #######################
 # SETUP INSTRUCTIONS #
@@ -29,13 +30,13 @@
 #      - Set the backup directory path (opath)
 #      - Set your GitHub repository URL (git_repo)
 #      - Add your database hosts, ports, usernames, and passwords
-#   3. Make the script executable: chmod +x backup_script.sh
+#   3. Make the script executable: chmod +x BackupDB.sh
 # 
 # === RUNNING THE SCRIPT ===
-#   - Manual execution: ./backup_script.sh
+#   - Manual execution: ./BackupDB.sh
 #   - Automated execution via crontab:
 #     1. Open crontab editor: crontab -e
-#     2. Add: 0 2 * * * /path/to/backup_script.sh >> /path/to/backup.log 2>&1
+#     2. Add: 0 2 * * * /path/to/BackupDB.sh >> /path/to/backup.log 2>&1
 # 
 # === TROUBLESHOOTING ===
 #   1. Git Authentication Failures:
@@ -89,9 +90,31 @@ username=( "your-db-user-1" "your-db-user-2" "your-db-user-3" )
 # rather than hardcoding passwords here
 password=( "your-db-password-1" "your-db-password-2" "your-db-password-3" )
 
+# Enhanced OS detection
+if [[ "$OSTYPE" == "darwin"* ]]; then
+  OS_TYPE="macos"
+  PACKAGE_MANAGER="brew"
+elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+  OS_TYPE="linux"
+  if command -v apt-get >/dev/null 2>&1; then
+    PACKAGE_MANAGER="apt"
+  elif command -v yum >/dev/null 2>&1; then
+    PACKAGE_MANAGER="yum"
+  elif command -v dnf >/dev/null 2>&1; then
+    PACKAGE_MANAGER="dnf"
+  elif command -v zypper >/dev/null 2>&1; then
+    PACKAGE_MANAGER="zypper"
+  else
+    PACKAGE_MANAGER="unknown"
+  fi
+else
+  OS_TYPE="unknown"
+  PACKAGE_MANAGER="unknown"
+fi
+
 # Set date variables for backup files
 today=$(date +%Y%m%d)
-if [[ "$OSTYPE" == "darwin"* ]]; then
+if [[ "$OS_TYPE" == "macos" ]]; then
   # macOS date command syntax
   yesterday=$(date -v -1d +%Y%m%d)
 else
@@ -99,13 +122,228 @@ else
   yesterday=$(date --date="yesterday" +%Y%m%d)
 fi
 
+#############################
+# DEPENDENCY VERIFICATION   #
+#############################
+
+# Function to check if running with elevated permissions
+check_elevated_permissions() {
+    if [[ $EUID -eq 0 ]] || [[ -n "$SUDO_USER" ]] || groups $USER | grep -q '\(admin\|sudo\|wheel\)'; then
+        return 0  # Has elevated permissions
+    else
+        return 1  # No elevated permissions
+    fi
+}
+
+# Function to install missing dependencies automatically
+install_dependency() {
+    local dep=$1
+    local install_cmd=""
+    
+    case $PACKAGE_MANAGER in
+        "brew")
+            case $dep in
+                "mysql") install_cmd="brew install mysql-client" ;;
+                "git") install_cmd="brew install git" ;;
+                "git-lfs") install_cmd="brew install git-lfs" ;;
+                *) install_cmd="brew install $dep" ;;
+            esac
+            ;;
+        "apt")
+            case $dep in
+                "mysql") install_cmd="apt-get update && apt-get install -y mysql-client" ;;
+                "git") install_cmd="apt-get update && apt-get install -y git" ;;
+                "git-lfs") install_cmd="apt-get update && apt-get install -y git-lfs" ;;
+                *) install_cmd="apt-get update && apt-get install -y $dep" ;;
+            esac
+            ;;
+        "yum"|"dnf")
+            case $dep in
+                "mysql") install_cmd="$PACKAGE_MANAGER install -y mysql" ;;
+                "git") install_cmd="$PACKAGE_MANAGER install -y git" ;;
+                "git-lfs") install_cmd="$PACKAGE_MANAGER install -y git-lfs" ;;
+                *) install_cmd="$PACKAGE_MANAGER install -y $dep" ;;
+            esac
+            ;;
+        "zypper")
+            case $dep in
+                "mysql") install_cmd="zypper install -y mysql-client" ;;
+                "git") install_cmd="zypper install -y git" ;;
+                "git-lfs") install_cmd="zypper install -y git-lfs" ;;
+                *) install_cmd="zypper install -y $dep" ;;
+            esac
+            ;;
+    esac
+    
+    if [[ -n "$install_cmd" ]]; then
+        echo "[INFO] Installing $dep using: $install_cmd"
+        if check_elevated_permissions; then
+            bash -c "$install_cmd"
+        else
+            echo "[INFO] Running with sudo: sudo $install_cmd"
+            sudo bash -c "$install_cmd"
+        fi
+        return $?
+    else
+        echo "[WARNING] Could not determine installation command for $dep on $OS_TYPE with $PACKAGE_MANAGER"
+        return 1
+    fi
+}
+
+# Function to provide manual installation instructions
+provide_install_instructions() {
+    local dep=$1
+    echo "[MANUAL INSTALLATION REQUIRED] Please install $dep using:"
+    
+    case $PACKAGE_MANAGER in
+        "brew")
+            case $dep in
+                "mysql") echo "  brew install mysql-client" ;;
+                "git") echo "  brew install git" ;;
+                "git-lfs") echo "  brew install git-lfs" ;;
+                *) echo "  brew install $dep" ;;
+            esac
+            ;;
+        "apt")
+            case $dep in
+                "mysql") echo "  sudo apt-get update && sudo apt-get install mysql-client" ;;
+                "git") echo "  sudo apt-get update && sudo apt-get install git" ;;
+                "git-lfs") echo "  sudo apt-get update && sudo apt-get install git-lfs" ;;
+                *) echo "  sudo apt-get install $dep" ;;
+            esac
+            ;;
+        "yum"|"dnf")
+            case $dep in
+                "mysql") echo "  sudo $PACKAGE_MANAGER install mysql" ;;
+                "git") echo "  sudo $PACKAGE_MANAGER install git" ;;
+                "git-lfs") echo "  sudo $PACKAGE_MANAGER install git-lfs" ;;
+                *) echo "  sudo $PACKAGE_MANAGER install $dep" ;;
+            esac
+            ;;
+        "zypper")
+            case $dep in
+                "mysql") echo "  sudo zypper install mysql-client" ;;
+                "git") echo "  sudo zypper install git" ;;
+                "git-lfs") echo "  sudo zypper install git-lfs" ;;
+                *) echo "  sudo zypper install $dep" ;;
+            esac
+            ;;
+        *)
+            echo "  [ERROR] Unknown package manager. Please install $dep manually."
+            ;;
+    esac
+}
+
+# Function to check all required dependencies
+check_dependencies() {
+    local missing_deps=()
+    local required_commands=("git" "mysql" "mysqldump" "gzip" "gunzip" "find" "diff")
+    
+    echo "[INFO] Checking system dependencies..."
+    echo "[INFO] Detected OS: $OS_TYPE, Package Manager: $PACKAGE_MANAGER"
+    
+    # Check basic commands
+    for cmd in "${required_commands[@]}"; do
+        if ! command -v "$cmd" >/dev/null 2>&1; then
+            case $cmd in
+                "mysql"|"mysqldump")
+                    if [[ ! " ${missing_deps[@]} " =~ " mysql " ]]; then
+                        missing_deps+=("mysql")
+                    fi
+                    ;;
+                *)
+                    missing_deps+=("$cmd")
+                    ;;
+            esac
+        fi
+    done
+    
+    # Check Git LFS separately
+    if command -v "git" >/dev/null 2>&1; then
+        if ! git lfs version >/dev/null 2>&1; then
+            missing_deps+=("git-lfs")
+        fi
+    fi
+    
+    # Handle missing dependencies
+    if [[ ${#missing_deps[@]} -gt 0 ]]; then
+        echo "[WARNING] Missing dependencies detected: ${missing_deps[*]}"
+        
+        if check_elevated_permissions; then
+            echo "[INFO] Running with elevated permissions."
+            read -p "[QUESTION] Would you like to automatically install missing dependencies? (y/N): " -n 1 -r
+            echo
+            if [[ $REPLY =~ ^[Yy]$ ]]; then
+                local install_failed=false
+                for dep in "${missing_deps[@]}"; do
+                    if ! install_dependency "$dep"; then
+                        install_failed=true
+                        provide_install_instructions "$dep"
+                    fi
+                done
+                
+                if $install_failed; then
+                    echo "[ERROR] Some dependencies failed to install automatically."
+                    echo "[ERROR] Please install them manually and run the script again."
+                    exit 1
+                fi
+                
+                # Initialize git-lfs if it was just installed
+                if [[ " ${missing_deps[@]} " =~ " git-lfs " ]] && command -v "git" >/dev/null 2>&1; then
+                    echo "[INFO] Initializing Git LFS..."
+                    git lfs install --system 2>/dev/null || git lfs install
+                fi
+            else
+                echo "[INFO] Please install the missing dependencies and run the script again."
+                for dep in "${missing_deps[@]}"; do
+                    provide_install_instructions "$dep"
+                done
+                exit 1
+            fi
+        else
+            echo "[INFO] No elevated permissions detected."
+            echo "[ERROR] Please install the missing dependencies and run the script again."
+            for dep in "${missing_deps[@]}"; do
+                provide_install_instructions "$dep"
+            done
+            exit 1
+        fi
+    else
+        echo "[SUCCESS] All required dependencies are installed."
+        
+        # Ensure git-lfs is initialized even if already installed
+        if command -v "git" >/dev/null 2>&1 && git lfs version >/dev/null 2>&1; then
+            git lfs install --system 2>/dev/null || git lfs install 2>/dev/null || true
+        fi
+    fi
+}
+
+# Function to add LFS pattern if not already tracked
+add_lfs_pattern() {
+    local pattern=$1
+    if [[ ! -f "$opath/.gitattributes" ]] || ! grep -q "$pattern" "$opath/.gitattributes"; then
+        echo "[INFO] Adding LFS pattern: $pattern"
+        git lfs track "$pattern"
+        return 0
+    else
+        echo "[INFO] Pattern $pattern already tracked in LFS"
+        return 1
+    fi
+}
+
 #########################
 # SCRIPT FUNCTIONALITY  #
 #########################
 
 echo "======================================================================"
-echo "DATABASE BACKUP SCRIPT - Starting backup process at $(date)"
+echo "DATABASE BACKUP SCRIPT v4.0 "
+echo "Copyright (c) 2025 VGX Consulting https://vgx.digital"
+echo
+echo "Starting backup process at $(date)"
 echo "======================================================================"
+
+# Step 0: Check system dependencies
+check_dependencies
 
 # Step 1: Ensure Git repository exists or clone it
 if [ ! -d "$opath/.git" ]; then
@@ -121,7 +359,9 @@ fi
 # Step 2: Update local repository
 echo "[INFO] Updating local Git repository..."
 cd "$opath" || { echo "[ERROR] Failed to change to backup directory '$opath'"; exit 1; }
-git pull
+if ! git pull; then
+    echo "[WARNING] Failed to pull from remote repository. Continuing with local state..."
+fi
 
 # Step 3: Clean up old backups (older than 5 days)
 echo "[INFO] Deleting backups older than 5 days..."
@@ -179,13 +419,30 @@ for (( i = 0; i < ${#mysqlhost[@]}; i++ )); do
     done
 done
 
+# Step 4.5: Manage Git LFS tracking for large backup files
+echo "[INFO] Checking for large backup files and managing LFS tracking..."
+
+# Find files larger than 100MB and add LFS patterns for their databases
+find "$opath" -name "*.gz" -size +100M 2>/dev/null | while read -r file; do
+    db_name=$(basename "$(dirname "$file")")
+    echo "[INFO] Large backup detected: $file"
+    add_lfs_pattern "$db_name/*.gz"
+done
+
+# Add .gitattributes if it exists
+[[ -f "$opath/.gitattributes" ]] && git add .gitattributes 2>/dev/null
+
 # Step 5: Commit and push changes to Git repository
 cd "$opath" || { echo "[ERROR] Failed to change to backup directory"; exit 1; }
 if git status --porcelain | grep -q '.'; then
     echo "[INFO] Changes detected. Committing and pushing to GitHub..."
+
     git add .
     git commit -m "Database backup update: $today"
-    git push origin main
+    
+    # Get the current branch name
+    current_branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "main")
+    git push origin "$current_branch"
     if [ $? -ne 0 ]; then
         echo "[ERROR] Failed to push to Git repository. Please check your connectivity and permissions."
         exit 1
@@ -196,5 +453,5 @@ fi
 
 echo "======================================================================"
 echo "BACKUP PROCESS COMPLETED SUCCESSFULLY at $(date)"
-echo " Script by - VGX Consulting. All rights reserved. For support, contact: support.backupdb@vgx.email
+echo " Script by - VGX Consulting. All rights reserved. For support, contact: support.backupdb@vgx.email"
 echo "======================================================================"
