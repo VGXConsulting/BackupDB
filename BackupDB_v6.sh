@@ -1,0 +1,523 @@
+#!/bin/bash
+###############################################################################
+# Database Backup Script - Simplified & Optimized
+# Copyright (c) 2025 VGX Consulting by Vijendra Malhotra. All rights reserved.
+# 
+# Version: 6.0
+# Modified: July 22, 2025
+#
+# DESCRIPTION:
+# Automated MySQL database backups with multi-storage backend support.
+# Supports Git repositories, AWS S3, S3-compatible storage, and OneDrive.
+#
+# QUICK START:
+# 1. Set storage type: export VGX_DB_STORAGE_TYPE="git|s3|onedrive" 
+# 2. Configure credentials (see --help for details)
+# 3. Set database connection: export VGX_DB_HOSTS="host1,host2"
+# 4. Run: ./BackupDB.sh
+#
+# HELP: ./BackupDB.sh --help
+###############################################################################
+
+#########################
+# CONFIGURATION         #
+#########################
+
+# Script defaults
+VERSION="6.0"
+SCRIPT_NAME="BackupDB"
+
+# Storage backend (git is default for backward compatibility)
+STORAGE_TYPE=${VGX_DB_STORAGE_TYPE:-"git"}
+
+# Local backup directory  
+BACKUP_DIR=${VGX_DB_OPATH:-"$HOME/DBBackup/"}
+
+# Git configuration
+GIT_REPO=${VGX_DB_GIT_REPO:-"git@github.com:YourUsername/DBBackups.git"}
+
+# S3 configuration (works for AWS S3 and all S3-compatible services)
+S3_BUCKET=${AWS_S3_BUCKET:-""}
+S3_PREFIX=${AWS_S3_PREFIX:-"backups/"}
+S3_ENDPOINT=${AWS_ENDPOINT_URL:-""}  # Leave empty for AWS S3
+S3_REGION=${AWS_S3_REGION:-"us-east-1"}
+
+# OneDrive configuration
+ONEDRIVE_REMOTE=${ONEDRIVE_REMOTE:-""}
+ONEDRIVE_PATH=${ONEDRIVE_PATH:-"/DatabaseBackups"}
+
+# Database configuration
+if [[ -n "$VGX_DB_HOSTS" ]]; then
+    IFS=',' read -ra DB_HOSTS <<< "$VGX_DB_HOSTS"
+else
+    DB_HOSTS=("localhost")
+fi
+
+if [[ -n "$VGX_DB_USERS" ]]; then
+    IFS=',' read -ra DB_USERS <<< "$VGX_DB_USERS"
+else
+    DB_USERS=("root")
+fi
+
+if [[ -n "$VGX_DB_PASSWORDS" ]]; then
+    IFS=',' read -ra DB_PASSWORDS <<< "$VGX_DB_PASSWORDS"
+else
+    DB_PASSWORDS=("password")
+fi
+
+# Date variables
+TODAY=$(date +%Y%m%d)
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    YESTERDAY=$(date -v -1d +%Y%m%d)
+else
+    YESTERDAY=$(date --date="yesterday" +%Y%m%d)
+fi
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+#########################
+# UTILITY FUNCTIONS     #
+#########################
+
+# Unified logging function
+log() {
+    local level=$1
+    shift
+    local message="$*"
+    
+    case $level in
+        "ERROR")   echo -e "${RED}[ERROR] $message${NC}" ;;
+        "WARN")    echo -e "${YELLOW}[WARN] $message${NC}" ;;
+        "SUCCESS") echo -e "${GREEN}[SUCCESS] $message${NC}" ;;
+        "INFO")    echo "[INFO] $message" ;;
+        *)         echo "[$level] $message" ;;
+    esac
+}
+
+# Execute AWS CLI command with optional endpoint
+aws_cmd() {
+    local cmd="$1"
+    if [[ -n "$S3_ENDPOINT" ]]; then
+        aws --endpoint-url="$S3_ENDPOINT" $cmd
+    else
+        aws $cmd
+    fi
+}
+
+# Show script help
+show_help() {
+    cat << 'EOF'
+DATABASE BACKUP SCRIPT v6.0 - SIMPLIFIED & OPTIMIZED
+
+USAGE:
+  ./BackupDB.sh [OPTIONS]
+
+OPTIONS:
+  -h, --help         Show this help
+  -v, --version      Show version
+  -t, --test         Test configuration
+  --dry-run          Show what would be done
+
+STORAGE TYPES:
+  git       Git repository (default)
+  s3        AWS S3 or S3-compatible (Backblaze B2, Wasabi, etc.)
+  onedrive  Microsoft OneDrive
+
+QUICK SETUP:
+
+  Git Storage:
+    export VGX_DB_GIT_REPO="git@github.com:user/repo.git"
+
+  S3/S3-Compatible:
+    export VGX_DB_STORAGE_TYPE="s3"
+    export AWS_ACCESS_KEY_ID="your-key"
+    export AWS_SECRET_ACCESS_KEY="your-secret" 
+    export AWS_S3_BUCKET="your-bucket"
+    # For non-AWS (Backblaze B2, Wasabi, etc.):
+    export AWS_ENDPOINT_URL="https://s3.region.service.com"
+
+  OneDrive:
+    export VGX_DB_STORAGE_TYPE="onedrive"
+    export ONEDRIVE_REMOTE="onedrive"  # From rclone config
+
+  Database:
+    export VGX_DB_HOSTS="db1.com,db2.com"
+    export VGX_DB_USERS="user1,user2"
+    export VGX_DB_PASSWORDS="pass1,pass2"
+
+EXAMPLES:
+  ./BackupDB.sh --test                    # Test configuration
+  ./BackupDB.sh                           # Run backup
+  VGX_DB_STORAGE_TYPE=s3 ./BackupDB.sh    # Use S3 storage
+EOF
+}
+
+# Show version info
+show_version() {
+    echo "$SCRIPT_NAME v$VERSION"
+    echo "Multi-storage database backup tool"
+}
+
+# Show current configuration
+show_config() {
+    log INFO "Configuration Summary:"
+    echo "  Storage Type: $STORAGE_TYPE"
+    echo "  Backup Directory: $BACKUP_DIR"
+    
+    case $STORAGE_TYPE in
+        "git")
+            echo "  Git Repository: $GIT_REPO"
+            ;;
+        "s3")
+            echo "  S3 Bucket: $S3_BUCKET"
+            echo "  S3 Prefix: $S3_PREFIX"
+            if [[ -n "$S3_ENDPOINT" ]]; then
+                echo "  S3 Endpoint: $S3_ENDPOINT"
+            else
+                echo "  S3 Endpoint: AWS Default"
+            fi
+            ;;
+        "onedrive")
+            echo "  OneDrive Remote: $ONEDRIVE_REMOTE"
+            echo "  OneDrive Path: $ONEDRIVE_PATH"
+            ;;
+    esac
+    
+    echo "  Database Hosts: ${DB_HOSTS[*]}"
+    echo "  Database Users: ${DB_USERS[*]}"
+}
+
+#########################
+# VALIDATION FUNCTIONS  #
+#########################
+
+# Check if required commands exist
+check_command() {
+    local cmd=$1
+    if ! command -v "$cmd" >/dev/null 2>&1; then
+        log ERROR "Required command '$cmd' not found. Please install it."
+        return 1
+    fi
+}
+
+# Validate storage configuration
+validate_storage() {
+    case $STORAGE_TYPE in
+        "git")
+            check_command git || return 1
+            if [[ -z "$GIT_REPO" ]] || [[ "$GIT_REPO" == *"YourUsername"* ]]; then
+                log ERROR "Git repository not configured. Set VGX_DB_GIT_REPO environment variable."
+                return 1
+            fi
+            ;;
+        "s3")
+            check_command aws || return 1
+            if [[ -z "$S3_BUCKET" ]]; then
+                log ERROR "S3 bucket not configured. Set AWS_S3_BUCKET environment variable."
+                return 1
+            fi
+            if [[ -z "$AWS_ACCESS_KEY_ID" ]] || [[ -z "$AWS_SECRET_ACCESS_KEY" ]]; then
+                log ERROR "S3 credentials not configured. Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY."
+                return 1
+            fi
+            # Test S3 connection
+            log INFO "Testing S3 connection..."
+            if ! aws_cmd "s3 ls" >/dev/null 2>&1; then
+                log ERROR "S3 connection failed. Check credentials and endpoint."
+                return 1
+            fi
+            ;;
+        "onedrive")
+            check_command rclone || return 1
+            if [[ -z "$ONEDRIVE_REMOTE" ]]; then
+                log ERROR "OneDrive remote not configured. Set ONEDRIVE_REMOTE environment variable."
+                return 1
+            fi
+            # Test rclone connection
+            log INFO "Testing OneDrive connection..."
+            if ! rclone listremotes | grep -q "^${ONEDRIVE_REMOTE}:$"; then
+                log ERROR "OneDrive remote '$ONEDRIVE_REMOTE' not found. Run: rclone config"
+                return 1
+            fi
+            ;;
+        *)
+            log ERROR "Unsupported storage type: $STORAGE_TYPE"
+            return 1
+            ;;
+    esac
+}
+
+# Validate database configuration
+validate_database() {
+    check_command mysql || return 1
+    check_command mysqldump || return 1
+    
+    if [[ ${#DB_HOSTS[@]} -ne ${#DB_USERS[@]} ]] || [[ ${#DB_HOSTS[@]} -ne ${#DB_PASSWORDS[@]} ]]; then
+        log ERROR "Database configuration mismatch. Hosts, users, and passwords arrays must have same length."
+        return 1
+    fi
+}
+
+# Run all validations
+validate_config() {
+    log INFO "Validating configuration..."
+    validate_storage || return 1
+    validate_database || return 1
+    log SUCCESS "Configuration validation passed!"
+}
+
+#########################
+# STORAGE FUNCTIONS     #
+#########################
+
+# Upload to Git repository
+upload_git() {
+    local backup_path="$1"
+    
+    log INFO "Uploading to Git repository..."
+    
+    # Initialize or update repository
+    if [[ ! -d "$backup_path/.git" ]]; then
+        log INFO "Cloning Git repository..."
+        git clone "$GIT_REPO" "$backup_path" || return 1
+    else
+        log INFO "Updating Git repository..."
+        cd "$backup_path" && git pull || true
+    fi
+    
+    cd "$backup_path" || return 1
+    
+    # Check for changes
+    if git status --porcelain | grep -q '.'; then
+        log INFO "Changes detected. Committing..."
+        git add .
+        git commit -m "Database backup: $TODAY"
+        git push origin "$(git rev-parse --abbrev-ref HEAD)" || return 1
+        log SUCCESS "Git upload completed."
+    else
+        log INFO "No changes to commit."
+    fi
+}
+
+# Upload to S3 (works with all S3-compatible services)
+upload_s3() {
+    local backup_path="$1"
+    
+    log INFO "Uploading to S3 storage..."
+    
+    local upload_count=0
+    find "$backup_path" -name "*.gz" -type f | while read -r file; do
+        local relative_path="${file#$backup_path/}"
+        local s3_key="${S3_PREFIX}${TODAY}/${relative_path}"
+        
+        log INFO "Uploading: $relative_path"
+        if aws_cmd "s3 cp \"$file\" \"s3://$S3_BUCKET/$s3_key\""; then
+            ((upload_count++))
+        else
+            log ERROR "Failed to upload: $relative_path"
+            return 1
+        fi
+    done
+    
+    log SUCCESS "S3 upload completed."
+}
+
+# Upload to OneDrive
+upload_onedrive() {
+    local backup_path="$1"
+    
+    log INFO "Uploading to OneDrive..."
+    
+    local target_path="${ONEDRIVE_REMOTE}:${ONEDRIVE_PATH}/${TODAY}"
+    
+    find "$backup_path" -name "*.gz" -type f | while read -r file; do
+        local relative_path="${file#$backup_path/}"
+        local target_dir=$(dirname "$target_path/$relative_path")
+        
+        rclone mkdir "$target_dir" 2>/dev/null || true
+        
+        log INFO "Uploading: $relative_path"
+        if ! rclone copy "$file" "$target_dir"; then
+            log ERROR "Failed to upload: $relative_path"
+            return 1
+        fi
+    done
+    
+    log SUCCESS "OneDrive upload completed."
+}
+
+# Main upload function
+upload_backups() {
+    local backup_path="$1"
+    
+    case $STORAGE_TYPE in
+        "git")      upload_git "$backup_path" ;;
+        "s3")       upload_s3 "$backup_path" ;;
+        "onedrive") upload_onedrive "$backup_path" ;;
+        *)          log ERROR "Unknown storage type: $STORAGE_TYPE"; return 1 ;;
+    esac
+}
+
+#########################
+# BACKUP FUNCTIONS      #
+#########################
+
+# Create database backup
+backup_database() {
+    local host="$1"
+    local port="$2"
+    local user="$3"
+    local password="$4"
+    local db="$5"
+    local backup_path="$6"
+    
+    local db_dir="$backup_path/$db"
+    mkdir -p "$db_dir"
+    
+    local backup_file="${db_dir}/${TODAY}_${db}.sql"
+    
+    log INFO "Backing up database: $db from $host"
+    
+    # Create backup
+    mysqldump --add-drop-table --allow-keywords --skip-dump-date -c \
+        -h "$host" -P "$port" -u "$user" -p"$password" "$db" > "$backup_file" 2>/dev/null
+    
+    if [[ ! -s "$backup_file" ]]; then
+        log WARN "Backup file is empty, skipping: $db"
+        rm -f "$backup_file"
+        return 1
+    fi
+    
+    # Compare with yesterday's backup
+    local yesterday_file="${db_dir}/${YESTERDAY}_${db}.sql.gz"
+    if [[ -f "$yesterday_file" ]]; then
+        log INFO "Comparing with yesterday's backup..."
+        gunzip -c "$yesterday_file" > "${db_dir}/${YESTERDAY}_${db}.sql"
+        
+        if diff -q "${db_dir}/${YESTERDAY}_${db}.sql" "$backup_file" >/dev/null; then
+            log INFO "No changes detected in $db, skipping."
+            rm -f "$backup_file" "${db_dir}/${YESTERDAY}_${db}.sql"
+            return 1
+        fi
+        
+        rm -f "${db_dir}/${YESTERDAY}_${db}.sql"
+    fi
+    
+    # Compress backup
+    gzip -9 "$backup_file"
+    log SUCCESS "Database backup created: $db"
+}
+
+# Run backups for all configured databases
+run_backups() {
+    local backup_path="$1"
+    mkdir -p "$backup_path"
+    
+    # Clean up old backups (older than 5 days)
+    if [[ "$STORAGE_TYPE" == "git" ]]; then
+        find "$backup_path" -name "*.sql.gz" -mtime +5 -delete 2>/dev/null || true
+    fi
+    
+    # Process each database host
+    for (( i = 0; i < ${#DB_HOSTS[@]}; i++ )); do
+        local host="${DB_HOSTS[$i]}"
+        local user="${DB_USERS[$i]}"
+        local password="${DB_PASSWORDS[$i]}"
+        local port="3306"  # Default MySQL port
+        
+        log INFO "Processing database host: $host"
+        
+        # Test connection
+        if ! mysql -h "$host" -P "$port" -u "$user" -p"$password" -e "SELECT 1;" >/dev/null 2>&1; then
+            log ERROR "Cannot connect to database: $host"
+            continue
+        fi
+        
+        # Get database list (exclude system databases)
+        local databases
+        databases=$(mysql -h "$host" -P "$port" -u "$user" -p"$password" -e "SHOW DATABASES;" 2>/dev/null | \
+                   tail -n +2 | grep -Ev "mysql|information_schema|performance_schema|sys")
+        
+        # Backup each database
+        for db in $databases; do
+            backup_database "$host" "$port" "$user" "$password" "$db" "$backup_path"
+        done
+    done
+}
+
+#########################
+# MAIN SCRIPT           #
+#########################
+
+# Parse command line arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -h|--help)    show_help; exit 0 ;;
+        -v|--version) show_version; exit 0 ;;
+        -t|--test)    TEST_MODE=true; shift ;;
+        --dry-run)    DRY_RUN=true; shift ;;
+        *)            log ERROR "Unknown option: $1"; show_help; exit 1 ;;
+    esac
+done
+
+# Script header
+echo "======================================================================"
+echo "DATABASE BACKUP SCRIPT v$VERSION"
+echo "Copyright (c) 2025 VGX Consulting"
+echo
+echo "Starting at $(date)"
+echo "======================================================================"
+
+# Show configuration
+show_config
+echo
+
+# Validate configuration
+if ! validate_config; then
+    log ERROR "Configuration validation failed. Use --help for setup instructions."
+    exit 1
+fi
+
+# Test mode - just validate and exit
+if [[ "$TEST_MODE" == "true" ]]; then
+    log SUCCESS "Configuration test passed! Ready for backups."
+    exit 0
+fi
+
+# Dry run mode
+if [[ "$DRY_RUN" == "true" ]]; then
+    log INFO "DRY RUN MODE - No actual backups will be performed"
+    log INFO "Would backup databases from: ${DB_HOSTS[*]}"
+    log INFO "Would upload to: $STORAGE_TYPE"
+    exit 0
+fi
+
+# Run the backup process
+log INFO "Starting backup process..."
+
+# Create backups
+if ! run_backups "$BACKUP_DIR"; then
+    log ERROR "Backup process failed."
+    exit 1
+fi
+
+# Upload backups
+if ! upload_backups "$BACKUP_DIR"; then
+    log ERROR "Upload process failed."
+    exit 1
+fi
+
+# Cleanup for object storage (not Git)
+if [[ "$STORAGE_TYPE" != "git" ]]; then
+    log INFO "Cleaning up local files after successful upload..."
+    find "$BACKUP_DIR" -name "*.sql.gz" -mtime +1 -delete 2>/dev/null || true
+fi
+
+echo "======================================================================"
+log SUCCESS "Backup process completed successfully at $(date)"
+echo "======================================================================"

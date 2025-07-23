@@ -7,14 +7,25 @@ This file tracks version changes and improvements made to the BackupDB script.
 2. Startup banner (around line 397): `echo "DATABASE BACKUP SCRIPT vX.X"`
 3. Add entry to this CLAUDE.md file
 
-## Version 5.0 (2025-07-22)
+## Version 5.0.1 (2025-07-22)
+
+### CURRENT STATUS - ACTIVE DEVELOPMENT
+**🚧 IN PROGRESS: Backblaze B2 Integration Testing**
+- User: vijendra (Fish shell, macOS)
+- Backblaze B2 Credentials Configured:
+  - Bucket: `FilesUploaded`
+  - keyID: `004ca4f8df2509a0000000003` 
+  - Endpoint: `https://s3.us-west-004.backblazeb2.com`
+- **BLOCKER**: AWS CLI not installed on macOS
+- **NEXT STEP**: `brew install awscli` then test with `./BackupDB.sh --test-config`
 
 ### Major Feature: Multi-Storage Backend Support
-- **Storage Options**: Added support for Git, AWS S3, and Microsoft OneDrive storage backends
+- **Storage Options**: Added support for Git, AWS S3, S3-compatible storage, and Microsoft OneDrive
+- **Universal S3 Protocol**: Works with AWS S3, Backblaze B2, Wasabi, DigitalOcean Spaces, MinIO
 - **Storage Configuration**: New environment variable `VGX_DB_STORAGE_TYPE` (options: git, s3, onedrive)
 - **Storage-Specific Settings**: 
   - Git: `VGX_DB_GIT_REPO` (unchanged from previous versions)
-  - S3: `AWS_S3_BUCKET`, `AWS_S3_PREFIX` for bucket and path configuration
+  - S3/S3-Compatible: `AWS_S3_BUCKET`, `AWS_S3_PREFIX`, `AWS_ENDPOINT_URL`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`
   - OneDrive: `ONEDRIVE_REMOTE`, `ONEDRIVE_PATH` for rclone integration
 
 ### Key Architecture Changes
@@ -27,6 +38,9 @@ This file tracks version changes and improvements made to the BackupDB script.
 - **Backward Compatibility**: Git remains the default storage type for existing deployments
 
 ### Enhanced Features
+- **Universal S3 Compatibility**: Single codebase works with any S3-compatible service using standard environment variables
+- **No aws configure Required**: Uses environment variables (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY) for all S3-compatible services
+- **Smart Validation**: Uses `aws s3 ls` for testing (works universally) instead of AWS-specific STS calls
 - **Dynamic Dependency Management**: Installs aws-cli for S3, rclone for OneDrive based on storage selection
 - **Storage Validation**: Pre-flight checks for storage credentials and connectivity
 - **S3-Compatible Support**: Full support for Backblaze B2, Wasabi, DigitalOcean Spaces, MinIO with endpoint URLs
@@ -62,6 +76,13 @@ export AWS_S3_BUCKET="my-b2-bucket"
 # Built-in help and testing
 ./BackupDB.sh --help
 ./BackupDB.sh --test-config
+
+# Current user setup (Fish shell):
+set -gx AWS_ACCESS_KEY_ID "004ca4f8df2509a0000000003"
+set -gx AWS_SECRET_ACCESS_KEY "K004Dgvd2EFRBY7DuqxXhn8ikblozwA"
+set -gx AWS_ENDPOINT_URL "https://s3.us-west-004.backblazeb2.com"
+set -gx VGX_DB_STORAGE_TYPE "s3"
+set -gx AWS_S3_BUCKET "FilesUploaded"
 ```
 
 ## Version 4.2 (2025-07-22)
