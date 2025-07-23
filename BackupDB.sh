@@ -37,10 +37,10 @@ BACKUP_DIR=${VGX_DB_OPATH:-"$HOME/DBBackup/"}
 GIT_REPO=${VGX_DB_GIT_REPO:-"git@github.com:YourUsername/DBBackups.git"}
 
 # S3 configuration (works for AWS S3 and all S3-compatible services)
-S3_BUCKET=${AWS_S3_BUCKET:-""}
-S3_PREFIX=${AWS_S3_PREFIX:-"backups/"}
-S3_ENDPOINT=${AWS_ENDPOINT_URL:-""}  # Leave empty for AWS S3
-S3_REGION=${AWS_S3_REGION:-"us-east-1"}
+S3_BUCKET=${VGX_DB_S3_BUCKET:-""}
+S3_PREFIX=${VGX_DB_S3_PREFIX:-"backups/"}
+S3_ENDPOINT=${VGX_DB_S3_ENDPOINT_URL:-""}  # Leave empty for AWS S3
+S3_REGION=${VGX_DB_S3_REGION:-"us-east-1"}
 
 # OneDrive configuration
 ONEDRIVE_REMOTE=${ONEDRIVE_REMOTE:-""}
@@ -102,6 +102,10 @@ log() {
 # Execute AWS CLI command with optional endpoint
 aws_cmd() {
     local cmd="$1"
+    # Export VGX_DB_ variables as AWS_ variables for AWS CLI
+    export AWS_ACCESS_KEY_ID="$VGX_DB_S3_ACCESS_KEY_ID"
+    export AWS_SECRET_ACCESS_KEY="$VGX_DB_S3_SECRET_ACCESS_KEY"
+    
     if [[ -n "$S3_ENDPOINT" ]]; then
         aws --endpoint-url="$S3_ENDPOINT" $cmd
     else
@@ -135,11 +139,11 @@ QUICK SETUP:
 
   S3/S3-Compatible:
     export VGX_DB_STORAGE_TYPE="s3"
-    export AWS_ACCESS_KEY_ID="your-key"
-    export AWS_SECRET_ACCESS_KEY="your-secret" 
-    export AWS_S3_BUCKET="your-bucket"
+    export VGX_DB_S3_ACCESS_KEY_ID="your-key"
+    export VGX_DB_S3_SECRET_ACCESS_KEY="your-secret" 
+    export VGX_DB_S3_BUCKET="your-bucket"
     # For non-AWS (Backblaze B2, Wasabi, etc.):
-    export AWS_ENDPOINT_URL="https://s3.region.service.com"
+    export VGX_DB_S3_ENDPOINT_URL="https://s3.region.service.com"
 
   OneDrive:
     export VGX_DB_STORAGE_TYPE="onedrive"
@@ -218,11 +222,11 @@ validate_storage() {
         "s3")
             check_command aws || return 1
             if [[ -z "$S3_BUCKET" ]]; then
-                log ERROR "S3 bucket not configured. Set AWS_S3_BUCKET environment variable."
+                log ERROR "S3 bucket not configured. Set VGX_DB_S3_BUCKET environment variable."
                 return 1
             fi
-            if [[ -z "$AWS_ACCESS_KEY_ID" ]] || [[ -z "$AWS_SECRET_ACCESS_KEY" ]]; then
-                log ERROR "S3 credentials not configured. Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY."
+            if [[ -z "$VGX_DB_S3_ACCESS_KEY_ID" ]] || [[ -z "$VGX_DB_S3_SECRET_ACCESS_KEY" ]]; then
+                log ERROR "S3 credentials not configured. Set VGX_DB_S3_ACCESS_KEY_ID and VGX_DB_S3_SECRET_ACCESS_KEY."
                 return 1
             fi
             # Test S3 connection
