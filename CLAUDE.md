@@ -25,7 +25,7 @@ This file tracks version changes and improvements made to the BackupDB script.
 - **Storage Configuration**: New environment variable `VGX_DB_STORAGE_TYPE` (options: git, s3, onedrive)
 - **Storage-Specific Settings**: 
   - Git: `VGX_DB_GIT_REPO` (unchanged from previous versions)
-  - S3/S3-Compatible: `AWS_S3_BUCKET`, `AWS_S3_PREFIX`, `AWS_ENDPOINT_URL`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`
+  - S3/S3-Compatible: `VGX_DB_S3_BUCKET`, `VGX_DB_S3_PREFIX`, `VGX_DB_S3_ENDPOINT_URL`, `VGX_DB_S3_ACCESS_KEY_ID`, `VGX_DB_S3_SECRET_ACCESS_KEY`
   - OneDrive: `ONEDRIVE_REMOTE`, `ONEDRIVE_PATH` for rclone integration
 
 ### Key Architecture Changes
@@ -39,7 +39,7 @@ This file tracks version changes and improvements made to the BackupDB script.
 
 ### Enhanced Features
 - **Universal S3 Compatibility**: Single codebase works with any S3-compatible service using standard environment variables
-- **No aws configure Required**: Uses environment variables (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY) for all S3-compatible services
+- **No aws configure Required**: Uses environment variables (VGX_DB_S3_ACCESS_KEY_ID, VGX_DB_S3_SECRET_ACCESS_KEY) for all S3-compatible services
 - **Smart Validation**: Uses `aws s3 ls` for testing (works universally) instead of AWS-specific STS calls
 - **Dynamic Dependency Management**: Installs aws-cli for S3, rclone for OneDrive based on storage selection
 - **Storage Validation**: Pre-flight checks for storage credentials and connectivity
@@ -57,8 +57,8 @@ This file tracks version changes and improvements made to the BackupDB script.
 
 # AWS S3 storage
 export VGX_DB_STORAGE_TYPE="s3"
-export AWS_S3_BUCKET="my-db-backups"
-export AWS_S3_PREFIX="prod-backups/"
+export VGX_DB_S3_BUCKET="my-db-backups"
+export VGX_DB_S3_PREFIX="prod-backups/"
 ./BackupDB.sh
 
 # OneDrive storage
@@ -69,8 +69,8 @@ export ONEDRIVE_PATH="/DatabaseBackups"
 
 # Backblaze B2 storage
 export VGX_DB_STORAGE_TYPE="s3"
-export AWS_ENDPOINT_URL="https://s3.us-west-002.backblazeb2.com"
-export AWS_S3_BUCKET="my-b2-bucket"
+export VGX_DB_S3_ENDPOINT_URL="https://s3.us-west-002.backblazeb2.com"
+export VGX_DB_S3_BUCKET="my-b2-bucket"
 ./BackupDB.sh
 
 # Built-in help and testing
@@ -78,11 +78,11 @@ export AWS_S3_BUCKET="my-b2-bucket"
 ./BackupDB.sh --test-config
 
 # Current user setup (Fish shell):
-set -gx AWS_ACCESS_KEY_ID "004ca4f8df2509a0000000003"
-set -gx AWS_SECRET_ACCESS_KEY "K004Dgvd2EFRBY7DuqxXhn8ikblozwA"
-set -gx AWS_ENDPOINT_URL "https://s3.us-west-004.backblazeb2.com"
+set -gx VGX_DB_S3_ACCESS_KEY_ID "004ca4f8df2509a0000000003"
+set -gx VGX_DB_S3_SECRET_ACCESS_KEY "K004Dgvd2EFRBY7DuqxXhn8ikblozwA"
+set -gx VGX_DB_S3_ENDPOINT_URL "https://s3.us-west-004.backblazeb2.com"
 set -gx VGX_DB_STORAGE_TYPE "s3"
-set -gx AWS_S3_BUCKET "FilesUploaded"
+set -gx VGX_DB_S3_BUCKET "FilesUploaded"
 ```
 
 ## Version 4.2 (2025-07-22)
