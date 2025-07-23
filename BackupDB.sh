@@ -3,7 +3,7 @@
 # Database Backup Script with Multi-Storage Backend Support
 # Copyright (c) 2025 VGX Consulting by Vijendra Malhotra. All rights reserved.
 # 
-# Version: 5.0
+# Version: 5.0.1
 # Modified: July 22, 2025
 #
 # DESCRIPTION:
@@ -1111,7 +1111,7 @@ done
 #########################
 
 echo "======================================================================"
-echo "DATABASE BACKUP SCRIPT v5.0"
+echo "DATABASE BACKUP SCRIPT v5.0.1"
 echo "Copyright (c) 2025 VGX Consulting https://vgx.digital"
 echo
 echo "Starting backup process at $(date)"
