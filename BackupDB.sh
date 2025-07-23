@@ -45,7 +45,7 @@
 # 
 #    === AWS S3 STORAGE SETUP ===
 #    - Install AWS CLI: pip install awscli (or use package manager)
-#    - Configure AWS credentials: aws configure
+#    - Set AWS credentials via environment variables
 #      * AWS Access Key ID: [Your AWS Access Key]
 #      * AWS Secret Access Key: [Your AWS Secret Key]
 #      * Default region name: [e.g., us-east-1]
@@ -273,21 +273,19 @@ AUTHENTICATION SETUP:
 
   AWS S3:
     1. Install AWS CLI: pip install awscli
-    2. Configure: aws configure
-       - Access Key ID: AKIA...
-       - Secret Access Key: wJal...
-       - Region: us-east-1
-       - Output: json
+    2. Set credentials via environment variables:
+       - export AWS_ACCESS_KEY_ID="AKIA..."
+       - export AWS_SECRET_ACCESS_KEY="wJal..."
     3. Create bucket: aws s3 mb s3://backup-bucket
     4. Set: export AWS_S3_BUCKET="backup-bucket"
 
   S3-Compatible Storage (Backblaze B2, Wasabi, etc.):
     1. Install AWS CLI: pip install awscli
-    2. Configure credentials: aws configure
-       - Use your service's access keys
+    2. Set credentials via environment variables:
+       - export AWS_ACCESS_KEY_ID="your-access-key"
+       - export AWS_SECRET_ACCESS_KEY="your-secret-key"
     3. Set endpoint: export AWS_ENDPOINT_URL="https://s3.us-west-002.backblazeb2.com"
-    4. Set region: export AWS_S3_REGION="us-west-002"
-    5. Set bucket: export AWS_S3_BUCKET="your-bucket"
+    4. Set bucket: export AWS_S3_BUCKET="your-bucket"
 
   OneDrive:
     1. Install rclone: curl https://rclone.org/install.sh | sudo bash
@@ -764,17 +762,18 @@ validate_storage_config() {
                 return 1
             fi
             
-            # Test AWS credentials
-            local aws_cmd="aws sts get-caller-identity"
+            # Test S3 credentials (works for AWS S3 and all S3-compatible services)
+            local s3_test_cmd="aws s3 ls"
             if [[ -n "$AWS_ENDPOINT_URL" ]]; then
-                aws_cmd="aws --endpoint-url=$AWS_ENDPOINT_URL sts get-caller-identity"
+                s3_test_cmd="aws --endpoint-url=$AWS_ENDPOINT_URL s3 ls"
+                logme INFO "Testing S3-compatible storage at: $AWS_ENDPOINT_URL"
+            else
+                logme INFO "Testing AWS S3 credentials"
             fi
             
-            if ! $aws_cmd >/dev/null 2>&1; then
-                logme ERROR "AWS credentials not configured. Please run: aws configure"
-                if [[ -n "$AWS_ENDPOINT_URL" ]]; then
-                    logme ERROR "For S3-compatible storage, ensure endpoint URL is correct: $AWS_ENDPOINT_URL"
-                fi
+            if ! $s3_test_cmd >/dev/null 2>&1; then
+                logme ERROR "S3 credentials test failed."
+                logme ERROR "Please ensure AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables are set."
                 return 1
             fi
             
