@@ -1,0 +1,19 @@
+# Claude files
+.claude/
+*.claude
+claude-*
+CLAUDE_*
+
+# VS Code files
+.vscode/
+*.code-workspace
+
+# IDE files
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
