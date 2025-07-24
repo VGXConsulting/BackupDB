@@ -37,10 +37,10 @@ BACKUP_DIR=${VGX_DB_OPATH:-"$HOME/DBBackup/"}
 GIT_REPO=${VGX_DB_GIT_REPO:-"git@github.com:YourUsername/DBBackups.git"}
 
 # S3 configuration (works for AWS S3 and all S3-compatible services)
-S3_BUCKET=${VGX_DB_S3_BUCKET:-""}
-S3_PREFIX=${VGX_DB_S3_PREFIX:-"backups/"}
-S3_ENDPOINT=${VGX_DB_S3_ENDPOINT_URL:-""}  # Leave empty for AWS S3
-S3_REGION=${VGX_DB_S3_REGION:-"us-east-1"}
+S3_BUCKET=${AWS_S3_BUCKET:-""}
+S3_PREFIX=${AWS_S3_PREFIX:-"backups/"}
+S3_ENDPOINT=${AWS_ENDPOINT_URL:-""}  # Leave empty for AWS S3
+S3_REGION=${AWS_S3_REGION:-"us-east-1"}
 
 # OneDrive configuration
 ONEDRIVE_REMOTE=${ONEDRIVE_REMOTE:-""}
@@ -101,15 +101,12 @@ log() {
 
 # Execute AWS CLI command with optional endpoint
 aws_cmd() {
-    local cmd="$1"
-    # Export VGX_DB_ variables as AWS_ variables for AWS CLI
-    export AWS_ACCESS_KEY_ID="$VGX_DB_S3_ACCESS_KEY_ID"
-    export AWS_SECRET_ACCESS_KEY="$VGX_DB_S3_SECRET_ACCESS_KEY"
+    # AWS credentials already set as environment variables
     
     if [[ -n "$S3_ENDPOINT" ]]; then
-        aws --endpoint-url="$S3_ENDPOINT" $cmd
+        aws --endpoint-url="$S3_ENDPOINT" "$@"
     else
-        aws $cmd
+        aws "$@"
     fi
 }
 
@@ -139,11 +136,11 @@ QUICK SETUP:
 
   S3/S3-Compatible:
     export VGX_DB_STORAGE_TYPE="s3"
-    export VGX_DB_S3_ACCESS_KEY_ID="your-key"
-    export VGX_DB_S3_SECRET_ACCESS_KEY="your-secret" 
-    export VGX_DB_S3_BUCKET="your-bucket"
+    export AWS_ACCESS_KEY_ID="your-key"
+    export AWS_SECRET_ACCESS_KEY="your-secret" 
+    export AWS_S3_BUCKET="your-bucket"
     # For non-AWS (Backblaze B2, Wasabi, etc.):
-    export VGX_DB_S3_ENDPOINT_URL="https://s3.region.service.com"
+    export AWS_ENDPOINT_URL="https://s3.region.service.com"
 
   OneDrive:
     export VGX_DB_STORAGE_TYPE="onedrive"
@@ -211,6 +208,8 @@ check_command() {
 
 # Validate storage configuration
 validate_storage() {
+    local test_connection=${1:-false}
+    
     case $STORAGE_TYPE in
         "git")
             check_command git || return 1
@@ -222,18 +221,20 @@ validate_storage() {
         "s3")
             check_command aws || return 1
             if [[ -z "$S3_BUCKET" ]]; then
-                log ERROR "S3 bucket not configured. Set VGX_DB_S3_BUCKET environment variable."
+                log ERROR "S3 bucket not configured. Set AWS_S3_BUCKET environment variable."
                 return 1
             fi
-            if [[ -z "$VGX_DB_S3_ACCESS_KEY_ID" ]] || [[ -z "$VGX_DB_S3_SECRET_ACCESS_KEY" ]]; then
-                log ERROR "S3 credentials not configured. Set VGX_DB_S3_ACCESS_KEY_ID and VGX_DB_S3_SECRET_ACCESS_KEY."
+            if [[ -z "$AWS_ACCESS_KEY_ID" ]] || [[ -z "$AWS_SECRET_ACCESS_KEY" ]]; then
+                log ERROR "S3 credentials not configured. Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY."
                 return 1
             fi
-            # Test S3 connection
-            log INFO "Testing S3 connection..."
-            if ! aws_cmd "s3 ls" >/dev/null 2>&1; then
-                log ERROR "S3 connection failed. Check credentials and endpoint."
-                return 1
+            # Test S3 connection only if requested
+            if [[ "$test_connection" == "true" ]]; then
+                log INFO "Testing S3 connection..."
+                if ! aws_cmd s3 ls >/dev/null 2>&1; then
+                    log ERROR "S3 connection failed. Check credentials and endpoint."
+                    return 1
+                fi
             fi
             ;;
         "onedrive")
@@ -242,11 +243,13 @@ validate_storage() {
                 log ERROR "OneDrive remote not configured. Set ONEDRIVE_REMOTE environment variable."
                 return 1
             fi
-            # Test rclone connection
-            log INFO "Testing OneDrive connection..."
-            if ! rclone listremotes | grep -q "^${ONEDRIVE_REMOTE}:$"; then
-                log ERROR "OneDrive remote '$ONEDRIVE_REMOTE' not found. Run: rclone config"
-                return 1
+            # Test rclone connection only if requested
+            if [[ "$test_connection" == "true" ]]; then
+                log INFO "Testing OneDrive connection..."
+                if ! rclone listremotes | grep -q "^${ONEDRIVE_REMOTE}:$"; then
+                    log ERROR "OneDrive remote '$ONEDRIVE_REMOTE' not found. Run: rclone config"
+                    return 1
+                fi
             fi
             ;;
         *)
@@ -269,8 +272,9 @@ validate_database() {
 
 # Run all validations
 validate_config() {
+    local test_connection=${1:-false}
     log INFO "Validating configuration..."
-    validate_storage || return 1
+    validate_storage "$test_connection" || return 1
     validate_database || return 1
     log SUCCESS "Configuration validation passed!"
 }
@@ -314,16 +318,18 @@ upload_s3() {
     
     log INFO "Uploading to S3 storage..."
     
+    cd "$backup_path" || return 1
+    
     local upload_count=0
-    find "$backup_path" -name "*.gz" -type f | while read -r file; do
-        local relative_path="${file#$backup_path/}"
-        local s3_key="${S3_PREFIX}${TODAY}/${relative_path}"
+    find . -name "*.gz" -type f | while read -r file; do
+        local clean_file="${file#./}"
+        local s3_key="${S3_PREFIX}${TODAY}/${clean_file}"
         
-        log INFO "Uploading: $relative_path"
-        if aws_cmd "s3 cp \"$file\" \"s3://$S3_BUCKET/$s3_key\""; then
+        log INFO "Uploading: $clean_file"
+        if aws_cmd s3 cp "$clean_file" "s3://$S3_BUCKET/$s3_key"; then
             ((upload_count++))
         else
-            log ERROR "Failed to upload: $relative_path"
+            log ERROR "Failed to upload: $clean_file"
             return 1
         fi
     done
@@ -413,7 +419,7 @@ backup_database() {
     fi
     
     # Compress backup
-    gzip -9 "$backup_file"
+    gzip -f -9 "$backup_file"
     log SUCCESS "Database backup created: $db"
 }
 
@@ -489,6 +495,11 @@ fi
 
 # Test mode - just validate and exit
 if [[ "$TEST_MODE" == "true" ]]; then
+    log INFO "Running connection tests..."
+    if ! validate_config true; then
+        log ERROR "Configuration test failed."
+        exit 1
+    fi
     log SUCCESS "Configuration test passed! Ready for backups."
     exit 0
 fi
