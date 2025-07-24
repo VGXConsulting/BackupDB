@@ -1,4 +1,4 @@
-# Database Backup Script v6.0 - Simplified
+# Database Backup Script v6.4 - Simplified
 
 **Automated MySQL backups with multi-storage backend support**
 
@@ -38,11 +38,11 @@ export VGX_DB_GIT_REPO="git@github.com:username/backup-repo.git"
 export VGX_DB_STORAGE_TYPE="s3"
 export AWS_ACCESS_KEY_ID="your-access-key"
 export AWS_SECRET_ACCESS_KEY="your-secret-key"
-export AWS_S3_BUCKET="your-bucket-name"
+export VGX_DB_S3_BUCKET="your-bucket-name"
 
 # For non-AWS services, add endpoint:
-export AWS_ENDPOINT_URL="https://s3.us-west-004.backblazeb2.com"  # Backblaze B2
-export AWS_ENDPOINT_URL="https://s3.us-central-1.wasabisys.com"   # Wasabi
+export VGX_DB_S3_ENDPOINT_URL="https://s3.us-west-004.backblazeb2.com"  # Backblaze B2
+export VGX_DB_S3_ENDPOINT_URL="https://s3.us-central-1.wasabisys.com"   # Wasabi
 ```
 
 ### OneDrive Storage
@@ -130,7 +130,7 @@ bucket-or-folder/
 
 # For S3 storage:
 aws s3 ls  # AWS S3
-aws --endpoint-url=$AWS_ENDPOINT_URL s3 ls  # S3-compatible
+aws --endpoint-url=$VGX_DB_S3_ENDPOINT_URL s3 ls  # S3-compatible
 
 # For OneDrive:
 rclone ls onedrive:
@@ -162,8 +162,8 @@ Create environment file:
 export VGX_DB_STORAGE_TYPE="s3"
 export AWS_ACCESS_KEY_ID="your-key"
 export AWS_SECRET_ACCESS_KEY="your-secret"
-export AWS_S3_BUCKET="your-bucket"
-export AWS_ENDPOINT_URL="https://your-endpoint"
+export VGX_DB_S3_BUCKET="your-bucket"
+export VGX_DB_S3_ENDPOINT_URL="https://your-endpoint"
 export VGX_DB_HOSTS="db1.com,db2.com"
 export VGX_DB_USERS="user1,user2"
 export VGX_DB_PASSWORDS="pass1,pass2"
@@ -175,27 +175,28 @@ Schedule with cron:
 0 2 * * * source ~/.backup_env && /path/to/BackupDB.sh >> /var/log/backup.log 2>&1
 ```
 
-## 📊 What's New in v6.0
+## 📊 What's New in v6.4
 
-### 🎯 **Simplified & Optimized**
-- **Reduced from 1230 to 400 lines** (67% smaller)
-- **Single `aws_cmd()` function** eliminates 6 duplicate endpoint patterns
-- **Unified `log()` function** replaces 29 inconsistent error messages
-- **Clear error messages** with specific instructions
-- **Streamlined validation** - one function per storage type
+### 🎯 **Major Fixes & Optimizations**
+- **Fixed AWS CLI Quoting Issues** - resolved argument parsing errors
+- **Optimized S3 Uploads** - single recursive command instead of file-by-file
+- **Consistent Environment Variables** - all script vars use `VGX_DB_` prefix
+- **Automatic Version Checking** - checks GitHub for updates on startup
+- **Improved Error Handling** - visible AWS commands for debugging
 
-### 🚀 **Improved Performance**
-- **Faster startup** - removed redundant checks
-- **Better error handling** - fail fast with clear messages
-- **Optimized file operations** - reduced disk I/O
+### 🔧 **Technical Improvements**
+- **Conditional Connection Testing** - S3/OneDrive tests only with `--test` flag
+- **Recursive S3 Upload** - `aws s3 cp . target --recursive` for speed
+- **Directory Structure Preserved** - maintains `<dbname>/<backup>` in S3
+- **Non-blocking Update Checks** - doesn't slow down script startup
 
-### 📚 **Better Documentation**
-- **Built-in help** - `./BackupDB.sh --help`
-- **Quick start guide** - get running in minutes
-- **Clear examples** - copy-paste configuration
+### 📚 **Environment Variable Consistency**
+- **AWS Credentials** - keep standard `AWS_ACCESS_KEY_ID` & `AWS_SECRET_ACCESS_KEY`
+- **All Other S3 Variables** - use `VGX_DB_S3_*` prefix for consistency
+- **Clear Documentation** - updated help and examples with correct variable names
 
 ---
 
-**Version:** 6.0  
+**Version:** 6.4  
 **Author:** VGX Consulting by Vijendra Malhotra  
 **Support:** support.backupdb@vgx.email
