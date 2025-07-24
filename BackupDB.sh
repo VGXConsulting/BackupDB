@@ -37,10 +37,10 @@ BACKUP_DIR=${VGX_DB_OPATH:-"$HOME/DBBackup/"}
 GIT_REPO=${VGX_DB_GIT_REPO:-"git@github.com:YourUsername/DBBackups.git"}
 
 # S3 configuration (works for AWS S3 and all S3-compatible services)
-S3_BUCKET=${AWS_S3_BUCKET:-""}
-S3_PREFIX=${AWS_S3_PREFIX:-"backups/"}
-S3_ENDPOINT=${AWS_ENDPOINT_URL:-""}  # Leave empty for AWS S3
-S3_REGION=${AWS_S3_REGION:-"us-east-1"}
+S3_BUCKET=${VGX_DB_S3_BUCKET:-""}
+S3_PREFIX=${VGX_DB_S3_PREFIX:-"backups/"}
+S3_ENDPOINT=${VGX_DB_S3_ENDPOINT_URL:-""}  # Leave empty for AWS S3
+S3_REGION=${VGX_DB_S3_REGION:-"us-east-1"}
 
 # OneDrive configuration
 ONEDRIVE_REMOTE=${ONEDRIVE_REMOTE:-""}
@@ -104,7 +104,7 @@ aws_cmd() {
     # AWS credentials already set as environment variables
     
     if [[ -n "$S3_ENDPOINT" ]]; then
-        aws --endpoint-url="$S3_ENDPOINT" "$@"
+        aws "$@" --endpoint-url="$S3_ENDPOINT"
     else
         aws "$@"
     fi
@@ -138,9 +138,9 @@ QUICK SETUP:
     export VGX_DB_STORAGE_TYPE="s3"
     export AWS_ACCESS_KEY_ID="your-key"
     export AWS_SECRET_ACCESS_KEY="your-secret" 
-    export AWS_S3_BUCKET="your-bucket"
+    export VGX_DB_S3_BUCKET="your-bucket"
     # For non-AWS (Backblaze B2, Wasabi, etc.):
-    export AWS_ENDPOINT_URL="https://s3.region.service.com"
+    export VGX_DB_S3_ENDPOINT_URL="https://s3.region.service.com"
 
   OneDrive:
     export VGX_DB_STORAGE_TYPE="onedrive"
@@ -221,7 +221,7 @@ validate_storage() {
         "s3")
             check_command aws || return 1
             if [[ -z "$S3_BUCKET" ]]; then
-                log ERROR "S3 bucket not configured. Set AWS_S3_BUCKET environment variable."
+                log ERROR "S3 bucket not configured. Set VGX_DB_S3_BUCKET environment variable."
                 return 1
             fi
             if [[ -z "$AWS_ACCESS_KEY_ID" ]] || [[ -z "$AWS_SECRET_ACCESS_KEY" ]]; then
@@ -320,21 +320,16 @@ upload_s3() {
     
     cd "$backup_path" || return 1
     
-    local upload_count=0
-    find . -name "*.gz" -type f | while read -r file; do
-        local clean_file="${file#./}"
-        local s3_key="${S3_PREFIX}${TODAY}/${clean_file}"
-        
-        log INFO "Uploading: $clean_file"
-        if aws_cmd s3 cp "$clean_file" "s3://$S3_BUCKET/$s3_key"; then
-            ((upload_count++))
-        else
-            log ERROR "Failed to upload: $clean_file"
-            return 1
-        fi
-    done
+    # Upload all .gz files recursively to S3
+    local s3_target="s3://$S3_BUCKET/${S3_PREFIX}${TODAY}/"
+    log INFO "AWS Command: aws s3 cp . \"$s3_target\" --recursive --endpoint-url=\"$S3_ENDPOINT\""
     
-    log SUCCESS "S3 upload completed."
+    if aws_cmd s3 cp . "$s3_target" --recursive; then
+        log SUCCESS "S3 upload completed."
+    else
+        log ERROR "S3 upload failed."
+        return 1
+    fi
 }
 
 # Upload to OneDrive
