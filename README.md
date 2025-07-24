@@ -1,4 +1,4 @@
-# Database Backup Script v6.4 - Simplified
+# Database Backup Script 
 
 **Automated MySQL backups with multi-storage backend support**
 
