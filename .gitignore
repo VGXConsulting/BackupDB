@@ -3,6 +3,7 @@
 *.claude
 claude-*
 CLAUDE_*
+CLAUDE.md
 
 # VS Code files
 .vscode/
