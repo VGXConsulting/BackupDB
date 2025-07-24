@@ -3,8 +3,8 @@
 # Database Backup Script - Simplified & Optimized
 # Copyright (c) 2025 VGX Consulting by Vijendra Malhotra. All rights reserved.
 # 
-# Version: 6.0
-# Modified: July 22, 2025
+# Version: 6.4
+# Modified: July 24, 2025
 #
 # DESCRIPTION:
 # Automated MySQL database backups with multi-storage backend support.
@@ -24,7 +24,7 @@
 #########################
 
 # Script defaults
-VERSION="6.0"
+VERSION="6.4"
 SCRIPT_NAME="BackupDB"
 
 # Storage backend (git is default for backward compatibility)
@@ -113,7 +113,7 @@ aws_cmd() {
 # Show script help
 show_help() {
     cat << 'EOF'
-DATABASE BACKUP SCRIPT v6.0 - SIMPLIFIED & OPTIMIZED
+DATABASE BACKUP SCRIPT v6.4 - SIMPLIFIED & OPTIMIZED
 
 USAGE:
   ./BackupDB.sh [OPTIONS]
@@ -139,6 +139,7 @@ QUICK SETUP:
     export AWS_ACCESS_KEY_ID="your-key"
     export AWS_SECRET_ACCESS_KEY="your-secret" 
     export VGX_DB_S3_BUCKET="your-bucket"
+    export VGX_DB_S3_PREFIX="backups/"  # Optional folder prefix
     # For non-AWS (Backblaze B2, Wasabi, etc.):
     export VGX_DB_S3_ENDPOINT_URL="https://s3.region.service.com"
 
@@ -155,6 +156,14 @@ EXAMPLES:
   ./BackupDB.sh --test                    # Test configuration
   ./BackupDB.sh                           # Run backup
   VGX_DB_STORAGE_TYPE=s3 ./BackupDB.sh    # Use S3 storage
+
+BACKBLAZE B2 EXAMPLE:
+  export VGX_DB_STORAGE_TYPE="s3"
+  export VGX_DB_S3_BUCKET="your-bucket"
+  export AWS_ACCESS_KEY_ID="your-keyID"
+  export AWS_SECRET_ACCESS_KEY="your-applicationKey" 
+  export VGX_DB_S3_ENDPOINT_URL="https://s3.us-west-004.backblazeb2.com"
+  ./BackupDB.sh
 EOF
 }
 

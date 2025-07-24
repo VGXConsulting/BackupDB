@@ -7,17 +7,48 @@ This file tracks version changes and improvements made to the BackupDB script.
 2. Startup banner (around line 397): `echo "DATABASE BACKUP SCRIPT vX.X"`
 3. Add entry to this CLAUDE.md file
 
+## Version 6.4 (2025-07-24)
+
+### Major Fixes & Optimizations
+- **Fixed AWS CLI Quoting**: Resolved argument parsing errors in S3 upload commands
+- **Optimized S3 Upload**: Single recursive upload command instead of file-by-file transfers
+- **Consistent Environment Variables**: All script variables now use `VGX_DB_` prefix except AWS credentials
+- **Improved Error Handling**: Better debugging with visible AWS commands in logs
+- **Conditional Connection Testing**: S3/OneDrive connection tests only run with `--test` flag
+
+### Environment Variable Changes
+- **AWS Credentials**: Keep standard `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` (required by AWS CLI)
+- **All Other S3 Variables**: Use `VGX_DB_S3_*` prefix for consistency
+  - `VGX_DB_S3_BUCKET` - S3 bucket name
+  - `VGX_DB_S3_PREFIX` - Optional folder prefix (default: "backups/")
+  - `VGX_DB_S3_ENDPOINT_URL` - Required for non-AWS S3 services
+  - `VGX_DB_S3_REGION` - S3 region
+
+### Technical Improvements
+- **S3 Upload Method**: Uses `aws s3 cp . target --recursive` for optimal performance
+- **Directory Structure**: Preserves `<dbname>/<backup>` structure in S3
+- **Command Visibility**: Debug output shows exact AWS commands being executed
+- **Simplified Logic**: Removed complex file iteration in favor of recursive operations
+
+### Current User Setup (Fish shell):
+```fish
+set -gx VGX_DB_STORAGE_TYPE "s3"
+set -gx VGX_DB_S3_BUCKET "FilesUploaded"
+set -gx AWS_ACCESS_KEY_ID "004ca4f8df2509a0000000003"
+set -gx AWS_SECRET_ACCESS_KEY "K004Dgvd2EFRBY7DuqxXhn8ikblozwA"
+set -gx VGX_DB_S3_ENDPOINT_URL "https://s3.us-west-004.backblazeb2.com"
+```
+
 ## Version 5.0.1 (2025-07-22)
 
-### CURRENT STATUS - ACTIVE DEVELOPMENT
-**🚧 IN PROGRESS: Backblaze B2 Integration Testing**
+### CURRENT STATUS - COMPLETED ✅
+**✅ COMPLETED: Backblaze B2 Integration**
 - User: vijendra (Fish shell, macOS)
-- Backblaze B2 Credentials Configured:
+- Backblaze B2 Successfully Configured:
   - Bucket: `FilesUploaded`
   - keyID: `004ca4f8df2509a0000000003` 
   - Endpoint: `https://s3.us-west-004.backblazeb2.com`
-- **BLOCKER**: AWS CLI not installed on macOS
-- **NEXT STEP**: `brew install awscli` then test with `./BackupDB.sh --test-config`
+- **STATUS**: Fully working with optimized recursive uploads
 
 ### Major Feature: Multi-Storage Backend Support
 - **Storage Options**: Added support for Git, AWS S3, S3-compatible storage, and Microsoft OneDrive
@@ -25,7 +56,7 @@ This file tracks version changes and improvements made to the BackupDB script.
 - **Storage Configuration**: New environment variable `VGX_DB_STORAGE_TYPE` (options: git, s3, onedrive)
 - **Storage-Specific Settings**: 
   - Git: `VGX_DB_GIT_REPO` (unchanged from previous versions)
-  - S3/S3-Compatible: `VGX_DB_S3_BUCKET`, `VGX_DB_S3_PREFIX`, `VGX_DB_S3_ENDPOINT_URL`, `VGX_DB_S3_ACCESS_KEY_ID`, `VGX_DB_S3_SECRET_ACCESS_KEY`
+  - S3/S3-Compatible: `VGX_DB_S3_BUCKET`, `VGX_DB_S3_PREFIX`, `VGX_DB_S3_ENDPOINT_URL`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`
   - OneDrive: `ONEDRIVE_REMOTE`, `ONEDRIVE_PATH` for rclone integration
 
 ### Key Architecture Changes
@@ -39,7 +70,7 @@ This file tracks version changes and improvements made to the BackupDB script.
 
 ### Enhanced Features
 - **Universal S3 Compatibility**: Single codebase works with any S3-compatible service using standard environment variables
-- **No aws configure Required**: Uses environment variables (VGX_DB_S3_ACCESS_KEY_ID, VGX_DB_S3_SECRET_ACCESS_KEY) for all S3-compatible services
+- **No aws configure Required**: Uses environment variables (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY) for all S3-compatible services
 - **Smart Validation**: Uses `aws s3 ls` for testing (works universally) instead of AWS-specific STS calls
 - **Dynamic Dependency Management**: Installs aws-cli for S3, rclone for OneDrive based on storage selection
 - **Storage Validation**: Pre-flight checks for storage credentials and connectivity
@@ -77,9 +108,9 @@ export VGX_DB_S3_BUCKET="my-b2-bucket"
 ./BackupDB.sh --help
 ./BackupDB.sh --test-config
 
-# Current user setup (Fish shell):
-set -gx VGX_DB_S3_ACCESS_KEY_ID "004ca4f8df2509a0000000003"
-set -gx VGX_DB_S3_SECRET_ACCESS_KEY "K004Dgvd2EFRBY7DuqxXhn8ikblozwA"
+# Legacy user setup (Fixed in v6.4):
+set -gx AWS_ACCESS_KEY_ID "004ca4f8df2509a0000000003"
+set -gx AWS_SECRET_ACCESS_KEY "K004Dgvd2EFRBY7DuqxXhn8ikblozwA"
 set -gx VGX_DB_S3_ENDPOINT_URL "https://s3.us-west-004.backblazeb2.com"
 set -gx VGX_DB_STORAGE_TYPE "s3"
 set -gx VGX_DB_S3_BUCKET "FilesUploaded"
