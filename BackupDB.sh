@@ -26,6 +26,7 @@
 # Script defaults
 VERSION="6.4"
 SCRIPT_NAME="BackupDB"
+GITHUB_REPO="https://raw.githubusercontent.com/VGXConsulting/BackupDB/refs/heads/main/BackupDB.sh"
 
 # Storage backend (git is default for backward compatibility)
 STORAGE_TYPE=${VGX_DB_STORAGE_TYPE:-"git"}
@@ -107,6 +108,21 @@ aws_cmd() {
         aws "$@" --endpoint-url="$S3_ENDPOINT"
     else
         aws "$@"
+    fi
+}
+
+# Check for script updates
+check_for_updates() {
+    if command -v curl >/dev/null 2>&1; then
+        local remote_version
+        remote_version=$(curl -s --max-time 5 "$GITHUB_REPO" | grep "^VERSION=" | head -1 | cut -d'"' -f2 2>/dev/null)
+        
+        if [[ -n "$remote_version" ]] && [[ "$remote_version" != "$VERSION" ]]; then
+            echo
+            log WARN "New version available: $remote_version (current: $VERSION)"
+            log INFO "Update available at: https://github.com/VGXConsulting/BackupDB"
+            echo
+        fi
     fi
 }
 
@@ -486,6 +502,9 @@ echo "Copyright (c) 2025 VGX Consulting"
 echo
 echo "Starting at $(date)"
 echo "======================================================================"
+
+# Check for updates (non-blocking)
+check_for_updates
 
 # Show configuration
 show_config
