@@ -39,9 +39,9 @@ GIT_REPO=${VGX_DB_GIT_REPO:-"git@github.com:YourUsername/DBBackups.git"}
 
 # S3 configuration (works for AWS S3 and all S3-compatible services)
 S3_BUCKET=${VGX_DB_S3_BUCKET:-""}
-S3_PREFIX=${VGX_DB_S3_PREFIX:-"backups/"}
+S3_PREFIX=${VGX_DB_S3_PREFIX:-"DatabaseBackups/"}
 S3_ENDPOINT=${VGX_DB_S3_ENDPOINT_URL:-""}  # Leave empty for AWS S3
-S3_REGION=${VGX_DB_S3_REGION:-"us-east-1"}
+S3_REGION=${VGX_DB_S3_REGION:-""}
 
 # OneDrive configuration
 ONEDRIVE_REMOTE=${ONEDRIVE_REMOTE:-""}
@@ -160,8 +160,12 @@ QUICK SETUP:
     export VGX_DB_S3_ENDPOINT_URL="https://s3.region.service.com"
 
   OneDrive:
+    # 1. Install rclone: brew install rclone
+    # 2. Configure: rclone config → New remote → Microsoft OneDrive
+    # 3. Test: rclone ls onedrive:
     export VGX_DB_STORAGE_TYPE="onedrive"
-    export ONEDRIVE_REMOTE="onedrive"  # From rclone config
+    export ONEDRIVE_REMOTE="onedrive"  # Name from rclone config
+    export ONEDRIVE_PATH="/DatabaseBackups"  # Optional folder path
 
   Database:
     export VGX_DB_HOSTS="db1.com,db2.com"
