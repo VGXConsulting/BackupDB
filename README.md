@@ -74,10 +74,59 @@ export ONEDRIVE_REMOTE="onedrive"  # From: rclone config
 3. Export credentials and endpoint (see examples above)
 
 ### OneDrive Setup
-1. Install rclone: `curl https://rclone.org/install.sh | sudo bash`
-2. Configure: `rclone config` → Choose Microsoft OneDrive
-3. Test: `rclone ls onedrive:`
-4. Set: `export ONEDRIVE_REMOTE="onedrive"`
+
+#### Step 1: Install rclone
+```bash
+# macOS
+brew install rclone
+
+# Linux/Unix
+curl https://rclone.org/install.sh | sudo bash
+```
+
+#### Step 2: Configure OneDrive
+```bash
+rclone config
+```
+
+**Follow the interactive prompts:**
+1. Choose: `n` (New remote)
+2. **Name:** `onedrive` (or your preferred name)
+3. **Storage:** Choose Microsoft OneDrive (usually option `26`)
+4. **Client ID:** Leave blank (press Enter)
+5. **Client Secret:** Leave blank (press Enter)
+6. **Region:** Choose your region (usually `1` for global)
+7. **Advanced config:** `n` (No)
+8. **Auto config:** `y` (Yes) - opens browser for authentication
+
+**Browser Authentication:**
+- Sign in to your Microsoft account
+- Grant permissions to rclone
+- Return to terminal when complete
+
+#### Step 3: Test Connection
+```bash
+# List configured remotes
+rclone listremotes
+
+# Test connection (should show your OneDrive files)
+rclone ls onedrive:
+
+# Create backup folder
+rclone mkdir onedrive:/DatabaseBackups
+```
+
+#### Step 4: Set Environment Variables
+```bash
+export VGX_DB_STORAGE_TYPE="onedrive"
+export ONEDRIVE_REMOTE="onedrive"  # Must match your rclone remote name
+export ONEDRIVE_PATH="/DatabaseBackups"  # Optional: folder for backups
+```
+
+#### Step 5: Test Script Configuration
+```bash
+./BackupDB.sh --test
+```
 
 ## 🎯 Usage
 
