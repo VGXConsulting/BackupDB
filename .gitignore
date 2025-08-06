@@ -5,6 +5,9 @@ claude-*
 CLAUDE_*
 CLAUDE.md
 
+# Configuration files with sensitive data
+BackupDB.env
+
 # VS Code files
 .vscode/
 *.code-workspace
