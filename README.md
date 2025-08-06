@@ -1,6 +1,21 @@
-# Database Backup Script 
+# BackupDB - Database Backup Script v6.7
 
-**Automated MySQL backups with multi-storage backend support**
+**Automated MySQL backups with multi-storage backend support, automatic cleanup, and flexible retention policies**
+
+[![Version](https://img.shields.io/badge/version-6.7-blue.svg)](RELEASE_NOTES.md)
+[![Storage](https://img.shields.io/badge/storage-Git%20%7C%20S3%20%7C%20OneDrive-green.svg)](#storage-backends)
+[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey.svg)](#supported-platforms)
+
+## 📋 Table of Contents
+- [Quick Start](#-quick-start)
+- [Installation Methods](#-installation-methods)
+- [Configuration](#-configuration)
+- [Environment Variables](#-environment-variables-reference)
+- [Storage Backends](#-storage-backends)
+- [Running from Git](#-running-directly-from-git)
+- [Automation & Cron](#-automation--cron-jobs)
+- [Troubleshooting](#-troubleshooting)
+- [What's New](#-whats-new-in-v67)
 
 ## 🚀 Quick Start
 
@@ -26,14 +41,111 @@
    ./BackupDB.sh           # Run backup
    ```
 
-## 📋 Storage Setup Examples
+## 📦 Installation Methods
 
-### Git Storage (Default)
+### Method 1: Download & Configure (Recommended)
+```bash
+# Download the script
+wget https://raw.githubusercontent.com/VijendraMalhotra/BackupDB/main/BackupDB.sh
+# OR
+curl -O https://raw.githubusercontent.com/VijendraMalhotra/BackupDB/main/BackupDB.sh
+
+# Make executable
+chmod +x BackupDB.sh
+
+# Download sample configuration
+wget https://raw.githubusercontent.com/VijendraMalhotra/BackupDB/main/BackupDB.sample.env
+cp BackupDB.sample.env BackupDB.env
+
+# Edit configuration
+nano BackupDB.env  # or vim, code, etc.
+
+# Test configuration
+./BackupDB.sh --test
+```
+
+### Method 2: Git Clone
+```bash
+git clone https://github.com/VijendraMalhotra/BackupDB.git
+cd BackupDB
+cp BackupDB.sample.env BackupDB.env
+nano BackupDB.env  # Configure your settings
+./BackupDB.sh --test
+```
+
+## ⚙️ Configuration
+
+### Using Environment Files (Recommended)
+The script automatically loads configuration from `.env` files in this priority order:
+1. `./BackupDB.env` (current directory)
+2. `$HOME/BackupDB.env` (home directory)
+
+```bash
+# Create your configuration file
+cp BackupDB.sample.env BackupDB.env
+# Edit with your settings
+nano BackupDB.env
+```
+
+### Using Environment Variables
+```bash
+# Export variables directly
+export VGX_DB_STORAGE_TYPE="s3"
+export VGX_DB_HOSTS="db1.example.com"
+export VGX_DB_USERS="backup_user"
+# ... other variables
+./BackupDB.sh
+```
+
+## 📊 Environment Variables Reference
+
+### Mandatory Variables
+| Variable | Description | Example |
+|----------|-------------|--------|
+| `VGX_DB_HOSTS` | Database hostnames (comma-separated) | `"db1.com,db2.com"` |
+| `VGX_DB_USERS` | Database usernames (comma-separated) | `"user1,user2"` |
+| `VGX_DB_PASSWORDS` | Database passwords (comma-separated) | `"pass1,pass2"` |
+
+### Storage-Specific Mandatory Variables
+
+#### For Git Storage (`VGX_DB_STORAGE_TYPE="git"`)
+| Variable | Description | Example |
+|----------|-------------|--------|
+| `VGX_DB_GIT_REPO` | Git repository URL | `"git@github.com:user/repo.git"` |
+
+#### For S3 Storage (`VGX_DB_STORAGE_TYPE="s3"`)
+| Variable | Description | Example |
+|----------|-------------|--------|
+| `AWS_ACCESS_KEY_ID` | S3 access key | `"AKIAEXAMPLE"` |
+| `AWS_SECRET_ACCESS_KEY` | S3 secret key | `"secretkey123"` |
+| `VGX_DB_S3_BUCKET` | S3 bucket name | `"my-backups"` |
+| `VGX_DB_S3_ENDPOINT_URL` | S3 endpoint (for non-AWS) | `"https://s3.backblaze.com"` |
+
+#### For OneDrive Storage (`VGX_DB_STORAGE_TYPE="onedrive"`)
+| Variable | Description | Example |
+|----------|-------------|--------|
+| `ONEDRIVE_REMOTE` | rclone remote name | `"onedrive"` |
+
+### Optional Variables
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `VGX_DB_STORAGE_TYPE` | `"git"` | Storage backend: git, s3, onedrive |
+| `VGX_DB_OPATH` | `"$HOME/DBBackup/"` | Local backup directory |
+| `VGX_DB_PORTS` | `"3306"` | Database ports (comma-separated) |
+| `VGX_DB_DELETE_LOCAL_BACKUPS` | `"true"` | Delete local files after upload |
+| `VGX_DB_GIT_RETENTION_DAYS` | `"-1"` | Git backup retention (-1=never delete) |
+| `VGX_DB_S3_PREFIX` | `"backups/"` | S3 folder prefix |
+| `VGX_DB_S3_REGION` | `"us-east-1"` | S3 region |
+| `ONEDRIVE_PATH` | `"/DatabaseBackups"` | OneDrive folder path |
+
+## 🗄️ Storage Backends
+
+### 1. Git Storage (Default)
 ```bash
 export VGX_DB_GIT_REPO="git@github.com:username/backup-repo.git"
 ```
 
-### S3-Compatible Storage (AWS S3, Backblaze B2, Wasabi, etc.)
+### 2. S3-Compatible Storage (AWS S3, Backblaze B2, Wasabi, etc.)
 ```bash
 export VGX_DB_STORAGE_TYPE="s3"
 export AWS_ACCESS_KEY_ID="your-access-key"
@@ -45,7 +157,7 @@ export VGX_DB_S3_ENDPOINT_URL="https://s3.us-west-004.backblazeb2.com"  # Backbl
 export VGX_DB_S3_ENDPOINT_URL="https://s3.us-central-1.wasabisys.com"   # Wasabi
 ```
 
-### OneDrive Storage
+### 3. OneDrive Storage
 ```bash
 export VGX_DB_STORAGE_TYPE="onedrive"
 export ONEDRIVE_REMOTE="onedrive"  # From: rclone config
@@ -203,49 +315,202 @@ ssh -T git@github.com
 - Make script executable: `chmod +x BackupDB.sh`
 - Check database connection permissions
 
-## 🚀 Automation
+## 🌐 Running Directly from Git
 
-Create environment file:
+### One-liner Download & Run
 ```bash
-# ~/.backup_env
+# Download, configure, and run in one go
+curl -s https://raw.githubusercontent.com/VijendraMalhotra/BackupDB/main/BackupDB.sh | bash -s -- --help
+
+# Or with wget
+wget -q -O - https://raw.githubusercontent.com/VijendraMalhotra/BackupDB/main/BackupDB.sh | bash -s -- --help
+```
+
+### Download & Configure
+```bash
+# Download script and sample config
+curl -O https://raw.githubusercontent.com/VijendraMalhotra/BackupDB/main/BackupDB.sh
+curl -O https://raw.githubusercontent.com/VijendraMalhotra/BackupDB/main/BackupDB.sample.env
+chmod +x BackupDB.sh
+
+# Configure
+cp BackupDB.sample.env BackupDB.env
+nano BackupDB.env  # Edit your settings
+
+# Test and run
+./BackupDB.sh --test
+./BackupDB.sh
+```
+
+### Use with Environment Variables
+```bash
+# Set variables and run directly
 export VGX_DB_STORAGE_TYPE="s3"
 export AWS_ACCESS_KEY_ID="your-key"
-export AWS_SECRET_ACCESS_KEY="your-secret"
 export VGX_DB_S3_BUCKET="your-bucket"
-export VGX_DB_S3_ENDPOINT_URL="https://your-endpoint"
-export VGX_DB_HOSTS="db1.com,db2.com"
-export VGX_DB_USERS="user1,user2"
-export VGX_DB_PASSWORDS="pass1,pass2"
+# ... other variables ...
+curl -s https://raw.githubusercontent.com/VijendraMalhotra/BackupDB/main/BackupDB.sh | bash
 ```
 
-Schedule with cron:
+## ⏰ Automation & Cron Jobs
+
+### Method 1: Using BackupDB.env file
 ```bash
-# Daily backup at 2 AM
-0 2 * * * source ~/.backup_env && /path/to/BackupDB.sh >> /var/log/backup.log 2>&1
+# Create system-wide config
+sudo mkdir -p /etc/backupdb
+sudo cp BackupDB.env /etc/backupdb/
+sudo chmod 600 /etc/backupdb/BackupDB.env
+
+# Install script
+sudo cp BackupDB.sh /usr/local/bin/
+sudo chmod +x /usr/local/bin/BackupDB.sh
+
+# Add to cron
+crontab -e
 ```
 
-## 📊 What's New in v6.4
+Add to crontab:
+```bash
+# Daily backup at 2:00 AM
+0 2 * * * cd /etc/backupdb && /usr/local/bin/BackupDB.sh >> /var/log/backup.log 2>&1
 
-### 🎯 **Major Fixes & Optimizations**
-- **Fixed AWS CLI Quoting Issues** - resolved argument parsing errors
-- **Optimized S3 Uploads** - single recursive command instead of file-by-file
-- **Consistent Environment Variables** - all script vars use `VGX_DB_` prefix
-- **Automatic Version Checking** - checks GitHub for updates on startup
-- **Improved Error Handling** - visible AWS commands for debugging
+# Weekly backup on Sundays at 3:00 AM
+0 3 * * 0 cd /etc/backupdb && /usr/local/bin/BackupDB.sh >> /var/log/backup-weekly.log 2>&1
 
-### 🔧 **Technical Improvements**
-- **Conditional Connection Testing** - S3/OneDrive tests only with `--test` flag
-- **Recursive S3 Upload** - `aws s3 cp . target --recursive` for speed
-- **Directory Structure Preserved** - maintains `<dbname>/<backup>` in S3
-- **Non-blocking Update Checks** - doesn't slow down script startup
+# Hourly backup during business hours (9 AM - 5 PM, Mon-Fri)
+0 9-17 * * 1-5 cd /etc/backupdb && /usr/local/bin/BackupDB.sh >> /var/log/backup-hourly.log 2>&1
+```
 
-### 📚 **Environment Variable Consistency**
-- **AWS Credentials** - keep standard `AWS_ACCESS_KEY_ID` & `AWS_SECRET_ACCESS_KEY`
-- **All Other S3 Variables** - use `VGX_DB_S3_*` prefix for consistency
-- **Clear Documentation** - updated help and examples with correct variable names
+### Method 2: Using Environment Variables in Cron
+```bash
+# Edit crontab
+crontab -e
+```
+
+Add environment variables and job:
+```bash
+# Environment variables
+VGX_DB_STORAGE_TYPE=s3
+AWS_ACCESS_KEY_ID=your-access-key
+AWS_SECRET_ACCESS_KEY=your-secret-key
+VGX_DB_S3_BUCKET=production-backups
+VGX_DB_S3_ENDPOINT_URL=https://s3.us-west-004.backblazeb2.com
+VGX_DB_HOSTS=prod-db1.example.com,prod-db2.example.com
+VGX_DB_USERS=backup_svc,backup_svc
+VGX_DB_PASSWORDS=secure_pass1,secure_pass2
+VGX_DB_DELETE_LOCAL_BACKUPS=true
+
+# Daily backup at 2 AM with email notifications
+MAILTO=admin@example.com
+0 2 * * * /usr/local/bin/BackupDB.sh
+```
+
+### Method 3: Systemd Timer (Linux)
+```bash
+# Create service file
+sudo tee /etc/systemd/system/backupdb.service << EOF
+[Unit]
+Description=BackupDB Database Backup Service
+Wants=backupdb.timer
+
+[Service]
+Type=oneshot
+WorkingDirectory=/etc/backupdb
+EnvironmentFile=/etc/backupdb/BackupDB.env
+ExecStart=/usr/local/bin/BackupDB.sh
+User=backup
+Group=backup
+EOF
+
+# Create timer file
+sudo tee /etc/systemd/system/backupdb.timer << EOF
+[Unit]
+Description=Run BackupDB Daily
+Requires=backupdb.service
+
+[Timer]
+OnCalendar=daily
+RandomizedDelaySec=30min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+EOF
+
+# Enable and start
+sudo systemctl daemon-reload
+sudo systemctl enable backupdb.timer
+sudo systemctl start backupdb.timer
+
+# Check status
+sudo systemctl status backupdb.timer
+```
+
+### Cron Examples for Different Scenarios
+
+```bash
+# Production: Daily at 2 AM with retention
+0 2 * * * cd /etc/backupdb && VGX_DB_GIT_RETENTION_DAYS=30 /usr/local/bin/BackupDB.sh
+
+# Development: Every 4 hours, keep 7 days
+0 */4 * * * cd /etc/backupdb && VGX_DB_GIT_RETENTION_DAYS=7 /usr/local/bin/BackupDB.sh
+
+# Critical systems: Every 2 hours with multiple storage
+0 */2 * * * cd /etc/backupdb && VGX_DB_STORAGE_TYPE=git /usr/local/bin/BackupDB.sh
+30 */2 * * * cd /etc/backupdb && VGX_DB_STORAGE_TYPE=s3 /usr/local/bin/BackupDB.sh
+
+# Weekend full backup with extended retention
+0 3 * * 6,0 cd /etc/backupdb && VGX_DB_GIT_RETENTION_DAYS=90 /usr/local/bin/BackupDB.sh
+```
+
+### Monitoring Cron Jobs
+
+```bash
+# View cron logs
+sudo tail -f /var/log/cron
+
+# View backup logs
+tail -f /var/log/backup.log
+
+# Check last backup status
+grep "BACKUP COMPLETED" /var/log/backup.log | tail -1
+
+# Monitor disk usage
+df -h ~/DBBackup/
+
+# Check for failed backups
+grep "ERROR\|FAILED" /var/log/backup.log | tail -10
+```
+
+## 🆕 What's New in v6.7
+
+[![Release Notes](https://img.shields.io/badge/📋-Release%20Notes-blue)](RELEASE_NOTES.md)
+
+### 🧹 **Enhanced Cleanup Features**
+- **Default Cleanup Enabled**: Local backup cleanup now defaults to `true`
+- **Git Retention Control**: New `VGX_DB_GIT_RETENTION_DAYS` variable
+- **Flexible Retention**: Set days to keep, 0 to delete all, -1 to never delete
+
+### ⚠️ **Breaking Changes**
+- Local backup cleanup now enabled by default - set `VGX_DB_DELETE_LOCAL_BACKUPS="false"` to disable
+
+### 📚 **Complete Release History**
+For detailed version history, features, and migration guides, see **[RELEASE_NOTES.md](RELEASE_NOTES.md)**
 
 ---
 
-**Version:** 6.4  
+## 📋 Supported Platforms
+- **macOS** (Homebrew package management)
+- **Ubuntu/Debian** (APT package management)  
+- **RHEL/CentOS/Fedora** (YUM/DNF package management)
+- **openSUSE** (Zypper package management)
+
+## 🤝 Contributing
+See [RELEASE_NOTES.md](RELEASE_NOTES.md) for version history and [BackupDB.sample.env](BackupDB.sample.env) for configuration examples.
+
+---
+
+**Version:** 6.7 (August 2025)  
 **Author:** VGX Consulting by Vijendra Malhotra  
+**Repository:** https://github.com/VijendraMalhotra/BackupDB  
 **Support:** support.backupdb@vgx.email
