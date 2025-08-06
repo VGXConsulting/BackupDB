@@ -3,7 +3,7 @@
 # Database Backup Script - Simplified & Optimized
 # Copyright (c) 2025 VGX Consulting by Vijendra Malhotra. All rights reserved.
 # 
-# Version: 6.5
+# Version: 6.7
 # Modified: August 6, 2025
 #
 # DESCRIPTION:
@@ -32,6 +32,11 @@ log() {
     shift
     local message="$*"
     
+    # In production mode (not test/debug mode), only show WARN and ERROR
+    if [[ "$TEST_MODE" != "true" && "$DEBUG_MODE" != "true" && "$level" != "ERROR" && "$level" != "WARN" ]]; then
+        return 0
+    fi
+    
     case $level in
         "ERROR")   echo -e "${RED}[ERROR] $message${NC}" ;;
         "WARN")    echo -e "${YELLOW}[WARN] $message${NC}" ;;
@@ -49,8 +54,6 @@ log() {
 load_env_file() {
     local env_file="$1"
     if [[ -f "$env_file" ]]; then
-        log "INFO" "Loading environment variables from: $env_file"
-        
         # Export variables from .env file, ignoring comments and empty lines
         while IFS= read -r line; do
             # Skip empty lines and comments
@@ -64,9 +67,11 @@ load_env_file() {
                 # Remove surrounding quotes if present
                 var_value=$(echo "$var_value" | sed -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'$//")
                 
+                # Expand variables like $HOME
+                var_value=$(eval echo "$var_value")
+                
                 # Export the variable
                 export "$var_name"="$var_value"
-                log "INFO" "Loaded: $var_name"
             fi
         done < "$env_file"
         return 0
@@ -74,22 +79,15 @@ load_env_file() {
     return 1
 }
 
-# Automatically load environment variables from .env files
-# Priority: 1. Current directory, 2. User home directory
-if load_env_file "./BackupDB.env"; then
-    log "SUCCESS" "Environment loaded from current directory"
-elif load_env_file "$HOME/BackupDB.env"; then
-    log "SUCCESS" "Environment loaded from home directory"
-else
-    log "INFO" "No BackupDB.env file found in current directory or home directory"
-fi
+# Silently load environment variables from .env files
+load_env_file "./BackupDB.env" || load_env_file "$HOME/BackupDB.env" || true
 
 #########################
 # CONFIGURATION         #
 #########################
 
 # Script defaults
-VERSION="6.5"
+VERSION="6.7"
 SCRIPT_NAME="BackupDB"
 GITHUB_REPO="https://raw.githubusercontent.com/VGXConsulting/BackupDB/refs/heads/main/BackupDB.sh"
 
@@ -98,6 +96,12 @@ STORAGE_TYPE=${VGX_DB_STORAGE_TYPE:-"git"}
 
 # Local backup directory  
 BACKUP_DIR=${VGX_DB_OPATH:-"$HOME/DBBackup/"}
+
+# Cleanup settings - delete local backups after successful upload to save space
+DELETE_LOCAL_BACKUPS=${VGX_DB_DELETE_LOCAL_BACKUPS:-"true"}
+
+# Git backup retention period in days (-1 = never delete, 0 = delete all, >0 = days to keep)
+GIT_RETENTION_DAYS=${VGX_DB_GIT_RETENTION_DAYS:-"-1"}
 
 # Git configuration
 GIT_REPO=${VGX_DB_GIT_REPO:-"git@github.com:YourUsername/DBBackups.git"}
@@ -143,6 +147,16 @@ fi
 # UTILITY FUNCTIONS     #
 #########################
 
+# Cleanup local backups after successful upload
+cleanup_local_backups() {
+    if [[ "$DELETE_LOCAL_BACKUPS" == "true" ]]; then
+        if [[ -d "$BACKUP_DIR" ]]; then
+            rm -rf "$BACKUP_DIR"
+            log "WARN" "Deleted entire backup directory: $BACKUP_DIR"
+        fi
+    fi
+}
+
 # Execute AWS CLI command with optional endpoint
 aws_cmd() {
     # AWS credentials already set as environment variables
@@ -172,7 +186,7 @@ check_for_updates() {
 # Show script help
 show_help() {
     cat << 'EOF'
-DATABASE BACKUP SCRIPT v6.5 - SIMPLIFIED & OPTIMIZED
+DATABASE BACKUP SCRIPT v6.7 - SIMPLIFIED & OPTIMIZED
 
 USAGE:
   ./BackupDB.sh [OPTIONS]
@@ -180,7 +194,8 @@ USAGE:
 OPTIONS:
   -h, --help         Show this help
   -v, --version      Show version
-  -t, --test         Test configuration
+  -t, --test         Test configuration only
+  -d, --debug        Debug mode (verbose logging)
   --dry-run          Show what would be done
 
 STORAGE TYPES:
@@ -222,9 +237,14 @@ QUICK SETUP:
     export VGX_DB_USERS="user1,user2"
     export VGX_DB_PASSWORDS="pass1,pass2"
 
+  Cleanup Settings:
+    export VGX_DB_DELETE_LOCAL_BACKUPS="false"      # Delete local backups after upload (default: true)
+    export VGX_DB_GIT_RETENTION_DAYS="7"            # Git backup retention in days (default: -1 = never delete)
+
 EXAMPLES:
   ./BackupDB.sh --test                    # Test configuration
-  ./BackupDB.sh                           # Run backup
+  ./BackupDB.sh --debug                   # Run backup with debug logging
+  ./BackupDB.sh                           # Run backup (quiet mode)
   VGX_DB_STORAGE_TYPE=s3 ./BackupDB.sh    # Use S3 storage
 
 BACKBLAZE B2 EXAMPLE:
@@ -247,6 +267,8 @@ BACKBLAZE B2 EXAMPLE:
     VGX_DB_HOSTS=db1.example.com,db2.example.com
     VGX_DB_USERS=backup_user1,backup_user2
     VGX_DB_PASSWORDS=secret1,secret2
+    VGX_DB_DELETE_LOCAL_BACKUPS=false
+    VGX_DB_GIT_RETENTION_DAYS=30
 
   Then simply run: ./BackupDB.sh
 EOF
@@ -401,8 +423,10 @@ upload_git() {
         git commit -m "Database backup: $TODAY"
         git push origin "$(git rev-parse --abbrev-ref HEAD)" || return 1
         log SUCCESS "Git upload completed."
+        cleanup_local_backups
     else
         log INFO "No changes to commit."
+        cleanup_local_backups
     fi
 }
 
@@ -420,6 +444,7 @@ upload_s3() {
     
     if aws_cmd s3 cp . "$s3_target" --recursive; then
         log SUCCESS "S3 upload completed."
+        cleanup_local_backups
     else
         log ERROR "S3 upload failed."
         return 1
@@ -448,6 +473,7 @@ upload_onedrive() {
     done
     
     log SUCCESS "OneDrive upload completed."
+    cleanup_local_backups
 }
 
 # Main upload function
@@ -517,9 +543,10 @@ run_backups() {
     local backup_path="$1"
     mkdir -p "$backup_path"
     
-    # Clean up old backups (older than 5 days)
-    if [[ "$STORAGE_TYPE" == "git" ]]; then
-        find "$backup_path" -name "*.sql.gz" -mtime +5 -delete 2>/dev/null || true
+    # Clean up old Git backups based on retention policy
+    if [[ "$STORAGE_TYPE" == "git" && "$GIT_RETENTION_DAYS" -ge 0 ]]; then
+        find "$backup_path" -name "*.sql.gz" -mtime "+$GIT_RETENTION_DAYS" -type f -delete 2>/dev/null || true
+        log "INFO" "Cleaned up old Git backups (older than $GIT_RETENTION_DAYS days)"
     fi
     
     # Process each database host
@@ -559,6 +586,7 @@ while [[ $# -gt 0 ]]; do
         -h|--help)    show_help; exit 0 ;;
         -v|--version) show_version; exit 0 ;;
         -t|--test)    TEST_MODE=true; shift ;;
+        -d|--debug)   DEBUG_MODE=true; shift ;;
         --dry-run)    DRY_RUN=true; shift ;;
         *)            log ERROR "Unknown option: $1"; show_help; exit 1 ;;
     esac
@@ -619,11 +647,8 @@ if ! upload_backups "$BACKUP_DIR"; then
     exit 1
 fi
 
-# Cleanup for object storage (not Git)
-if [[ "$STORAGE_TYPE" != "git" ]]; then
-    log INFO "Cleaning up local files after successful upload..."
-    find "$BACKUP_DIR" -name "*.sql.gz" -mtime +1 -delete 2>/dev/null || true
-fi
+# Final cleanup message
+log INFO "Backup process completed successfully!"
 
 echo "======================================================================"
 log SUCCESS "Backup process completed successfully at $(date)"
