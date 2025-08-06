@@ -3,8 +3,8 @@
 # Database Backup Script - Simplified & Optimized
 # Copyright (c) 2025 VGX Consulting by Vijendra Malhotra. All rights reserved.
 # 
-# Version: 6.4
-# Modified: July 24, 2025
+# Version: 6.5
+# Modified: August 6, 2025
 #
 # DESCRIPTION:
 # Automated MySQL database backups with multi-storage backend support.
@@ -19,12 +19,77 @@
 # HELP: ./BackupDB.sh --help
 ###############################################################################
 
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+# Unified logging function
+log() {
+    local level=$1
+    shift
+    local message="$*"
+    
+    case $level in
+        "ERROR")   echo -e "${RED}[ERROR] $message${NC}" ;;
+        "WARN")    echo -e "${YELLOW}[WARN] $message${NC}" ;;
+        "SUCCESS") echo -e "${GREEN}[SUCCESS] $message${NC}" ;;
+        "INFO")    echo "[INFO] $message" ;;
+        *)         echo "[$level] $message" ;;
+    esac
+}
+
+#########################
+# ENVIRONMENT LOADING   #
+#########################
+
+# Function to load environment variables from .env file
+load_env_file() {
+    local env_file="$1"
+    if [[ -f "$env_file" ]]; then
+        log "INFO" "Loading environment variables from: $env_file"
+        
+        # Export variables from .env file, ignoring comments and empty lines
+        while IFS= read -r line; do
+            # Skip empty lines and comments
+            [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+            
+            # Process export statements and direct variable assignments
+            if [[ "$line" =~ ^[[:space:]]*(export[[:space:]]+)?([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]]; then
+                local var_name="${BASH_REMATCH[2]}"
+                local var_value="${BASH_REMATCH[3]}"
+                
+                # Remove surrounding quotes if present
+                var_value=$(echo "$var_value" | sed -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'$//")
+                
+                # Export the variable
+                export "$var_name"="$var_value"
+                log "INFO" "Loaded: $var_name"
+            fi
+        done < "$env_file"
+        return 0
+    fi
+    return 1
+}
+
+# Automatically load environment variables from .env files
+# Priority: 1. Current directory, 2. User home directory
+if load_env_file "./BackupDB.env"; then
+    log "SUCCESS" "Environment loaded from current directory"
+elif load_env_file "$HOME/BackupDB.env"; then
+    log "SUCCESS" "Environment loaded from home directory"
+else
+    log "INFO" "No BackupDB.env file found in current directory or home directory"
+fi
+
 #########################
 # CONFIGURATION         #
 #########################
 
 # Script defaults
-VERSION="6.4"
+VERSION="6.5"
 SCRIPT_NAME="BackupDB"
 GITHUB_REPO="https://raw.githubusercontent.com/VGXConsulting/BackupDB/refs/heads/main/BackupDB.sh"
 
@@ -74,31 +139,9 @@ else
     YESTERDAY=$(date --date="yesterday" +%Y%m%d)
 fi
 
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m'
-
 #########################
 # UTILITY FUNCTIONS     #
 #########################
-
-# Unified logging function
-log() {
-    local level=$1
-    shift
-    local message="$*"
-    
-    case $level in
-        "ERROR")   echo -e "${RED}[ERROR] $message${NC}" ;;
-        "WARN")    echo -e "${YELLOW}[WARN] $message${NC}" ;;
-        "SUCCESS") echo -e "${GREEN}[SUCCESS] $message${NC}" ;;
-        "INFO")    echo "[INFO] $message" ;;
-        *)         echo "[$level] $message" ;;
-    esac
-}
 
 # Execute AWS CLI command with optional endpoint
 aws_cmd() {
@@ -129,7 +172,7 @@ check_for_updates() {
 # Show script help
 show_help() {
     cat << 'EOF'
-DATABASE BACKUP SCRIPT v6.4 - SIMPLIFIED & OPTIMIZED
+DATABASE BACKUP SCRIPT v6.5 - SIMPLIFIED & OPTIMIZED
 
 USAGE:
   ./BackupDB.sh [OPTIONS]
@@ -145,8 +188,15 @@ STORAGE TYPES:
   s3        AWS S3 or S3-compatible (Backblaze B2, Wasabi, etc.)
   onedrive  Microsoft OneDrive
 
+CONFIGURATION METHODS:
+
+  1. Environment Variables (export commands)
+  2. BackupDB.env file in current directory
+  3. BackupDB.env file in home directory ($HOME/BackupDB.env)
+
 QUICK SETUP:
 
+  Option 1: Environment Variables
   Git Storage:
     export VGX_DB_GIT_REPO="git@github.com:user/repo.git"
 
@@ -184,6 +234,21 @@ BACKBLAZE B2 EXAMPLE:
   export AWS_SECRET_ACCESS_KEY="your-applicationKey" 
   export VGX_DB_S3_ENDPOINT_URL="https://s3.us-west-004.backblazeb2.com"
   ./BackupDB.sh
+
+  Option 2: .env File Method
+  Create BackupDB.env in current directory or $HOME:
+
+    # BackupDB Configuration
+    VGX_DB_STORAGE_TYPE=s3
+    VGX_DB_S3_BUCKET=my-backup-bucket
+    AWS_ACCESS_KEY_ID=your-access-key
+    AWS_SECRET_ACCESS_KEY=your-secret-key
+    VGX_DB_S3_ENDPOINT_URL=https://s3.amazonaws.com
+    VGX_DB_HOSTS=db1.example.com,db2.example.com
+    VGX_DB_USERS=backup_user1,backup_user2
+    VGX_DB_PASSWORDS=secret1,secret2
+
+  Then simply run: ./BackupDB.sh
 EOF
 }
 
