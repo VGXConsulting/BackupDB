@@ -103,6 +103,9 @@ DELETE_LOCAL_BACKUPS=${VGX_DB_DELETE_LOCAL_BACKUPS:-"true"}
 # Git backup retention period in days (-1 = never delete, 0 = delete all, >0 = days to keep)
 GIT_RETENTION_DAYS=${VGX_DB_GIT_RETENTION_DAYS:-"-1"}
 
+# Incremental backups (skip if no changes detected)
+INCREMENTAL_BACKUPS=${VGX_DB_INCREMENTAL_BACKUPS:-"true"}
+
 # Git configuration
 GIT_REPO=${VGX_DB_GIT_REPO:-"git@github.com:YourUsername/DBBackups.git"}
 
@@ -405,11 +408,8 @@ upload_git() {
     
     log INFO "Uploading to Git repository..."
     
-    # Initialize or update repository
-    if [[ ! -d "$backup_path/.git" ]]; then
-        log INFO "Cloning Git repository..."
-        git clone "$GIT_REPO" "$backup_path" || return 1
-    else
+    # Update repository
+    if [[ -d "$backup_path/.git" ]]; then
         log INFO "Updating Git repository..."
         cd "$backup_path" && git pull || true
     fi
@@ -501,10 +501,7 @@ backup_database() {
     local db="$5"
     local backup_path="$6"
     
-    local db_dir="$backup_path/$db"
-    mkdir -p "$db_dir"
-    
-    local backup_file="${db_dir}/${TODAY}_${db}.sql"
+    local backup_file="${backup_path}/${TODAY}_${db}.sql"
     
     log INFO "Backing up database: $db from $host"
     
@@ -518,19 +515,21 @@ backup_database() {
         return 1
     fi
     
-    # Compare with yesterday's backup
-    local yesterday_file="${db_dir}/${YESTERDAY}_${db}.sql.gz"
-    if [[ -f "$yesterday_file" ]]; then
-        log INFO "Comparing with yesterday's backup..."
-        gunzip -c "$yesterday_file" > "${db_dir}/${YESTERDAY}_${db}.sql"
-        
-        if diff -q "${db_dir}/${YESTERDAY}_${db}.sql" "$backup_file" >/dev/null; then
-            log INFO "No changes detected in $db, skipping."
-            rm -f "$backup_file" "${db_dir}/${YESTERDAY}_${db}.sql"
-            return 1
+    # Compare with yesterday's backup if incremental backups are enabled
+    if [[ "$INCREMENTAL_BACKUPS" == "true" ]]; then
+        local yesterday_file="${backup_path}/${YESTERDAY}_${db}.sql.gz"
+        if [[ -f "$yesterday_file" ]]; then
+            log INFO "Comparing with yesterday's backup..."
+            gunzip -c "$yesterday_file" > "${backup_path}/${YESTERDAY}_${db}.sql"
+            
+            if diff -q "${backup_path}/${YESTERDAY}_${db}.sql" "$backup_file" >/dev/null; then
+                log INFO "No changes detected in $db, skipping."
+                rm -f "$backup_file" "${backup_path}/${YESTERDAY}_${db}.sql"
+                return 2  # Special code for "no changes"
+            fi
+            
+            rm -f "${backup_path}/${YESTERDAY}_${db}.sql"
         fi
-        
-        rm -f "${db_dir}/${YESTERDAY}_${db}.sql"
     fi
     
     # Compress backup
@@ -572,6 +571,11 @@ run_backups() {
         # Backup each database
         for db in $databases; do
             backup_database "$host" "$port" "$user" "$password" "$db" "$backup_path"
+            case $? in
+                0) ;; # Success, continue
+                2) ;; # No changes detected, continue  
+                *) log ERROR "Failed to backup database: $db"; return 1 ;;
+            esac
         done
     done
 }
@@ -634,6 +638,22 @@ fi
 
 # Run the backup process
 log INFO "Starting backup process..."
+
+# Setup Git repository if needed
+if [[ "$STORAGE_TYPE" == "git" ]]; then
+    if [[ -d "$BACKUP_DIR" && ! -d "$BACKUP_DIR/.git" ]]; then
+        log INFO "Removing existing backup directory for Git setup..."
+        rm -rf "$BACKUP_DIR"
+    fi
+    
+    if [[ ! -d "$BACKUP_DIR/.git" ]]; then
+        log INFO "Cloning Git repository..."
+        git clone "$GIT_REPO" "$BACKUP_DIR" || {
+            log ERROR "Failed to clone Git repository."
+            exit 1
+        }
+    fi
+fi
 
 # Create backups
 if ! run_backups "$BACKUP_DIR"; then
