@@ -2,6 +2,7 @@
 ###############################################################################
 # Database Backup Script - Simplified & Optimized
 # Copyright (c) 2025 VGX Consulting by Vijendra Malhotra. All rights reserved.
+# https://vgx.digital
 # 
 # Version: 6.7
 # Modified: August 6, 2025
@@ -628,6 +629,7 @@ done
 echo "======================================================================"
 echo "DATABASE BACKUP SCRIPT v$VERSION"
 echo "Copyright (c) 2025 VGX Consulting"
+echo "https://vgx.digital"
 echo
 echo "Starting at $(date)"
 echo "======================================================================"
