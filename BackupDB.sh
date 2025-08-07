@@ -336,6 +336,14 @@ validate_storage() {
                 log ERROR "Git repository not configured. Set VGX_DB_GIT_REPO environment variable."
                 return 1
             fi
+            # Test Git connection only if requested
+            if [[ "$test_connection" == "true" ]]; then
+                log INFO "Testing Git connection..."
+                if ! git ls-remote "$GIT_REPO" >/dev/null 2>&1; then
+                    log ERROR "Git connection failed. Check repository URL and SSH keys."
+                    return 1
+                fi
+            fi
             ;;
         "s3")
             check_command aws || return 1
@@ -380,12 +388,32 @@ validate_storage() {
 
 # Validate database configuration
 validate_database() {
+    local test_connection=${1:-false}
+    
     check_command mysql || return 1
     check_command mysqldump || return 1
     
     if [[ ${#DB_HOSTS[@]} -ne ${#DB_USERS[@]} ]] || [[ ${#DB_HOSTS[@]} -ne ${#DB_PASSWORDS[@]} ]]; then
         log ERROR "Database configuration mismatch. Hosts, users, and passwords arrays must have same length."
         return 1
+    fi
+    
+    # Test database connections only if requested
+    if [[ "$test_connection" == "true" ]]; then
+        log INFO "Testing database connections..."
+        for i in "${!DB_HOSTS[@]}"; do
+            local host="${DB_HOSTS[$i]}"
+            local user="${DB_USERS[$i]}"
+            local password="${DB_PASSWORDS[$i]}"
+            local port="3306"  # Default MySQL port
+            
+            log INFO "Testing connection to database: $host"
+            if ! mysql -h "$host" -P "$port" -u "$user" -p"$password" -e "SELECT 1;" >/dev/null 2>&1; then
+                log ERROR "Cannot connect to database: $host"
+                return 1
+            fi
+        done
+        log SUCCESS "All database connections successful!"
     fi
 }
 
@@ -394,7 +422,7 @@ validate_config() {
     local test_connection=${1:-false}
     log INFO "Validating configuration..."
     validate_storage "$test_connection" || return 1
-    validate_database || return 1
+    validate_database "$test_connection" || return 1
     log SUCCESS "Configuration validation passed!"
 }
 
