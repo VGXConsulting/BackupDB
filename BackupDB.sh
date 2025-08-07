@@ -4,7 +4,7 @@
 # Copyright (c) 2025 VGX Consulting by Vijendra Malhotra. All rights reserved.
 # https://vgx.digital
 # 
-# Version: 6.7
+# Version: 6.8
 # Modified: August 6, 2025
 #
 # DESCRIPTION:
@@ -88,7 +88,7 @@ load_env_file "./BackupDB.env" || load_env_file "$HOME/BackupDB.env" || true
 #########################
 
 # Script defaults
-VERSION="6.7"
+VERSION="6.8"
 SCRIPT_NAME="BackupDB"
 GITHUB_REPO="https://raw.githubusercontent.com/VGXConsulting/BackupDB/refs/heads/main/BackupDB.sh"
 
@@ -190,7 +190,7 @@ check_for_updates() {
 # Show script help
 show_help() {
     cat << 'EOF'
-DATABASE BACKUP SCRIPT v6.7 - SIMPLIFIED & OPTIMIZED
+DATABASE BACKUP SCRIPT v6.8 - SIMPLIFIED & OPTIMIZED
 
 USAGE:
   ./BackupDB.sh [OPTIONS]
@@ -625,6 +625,9 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# Capture start time for timing
+START_TIME=$(date +%s)
+
 # Script header
 echo "======================================================================"
 echo "DATABASE BACKUP SCRIPT v$VERSION"
@@ -700,6 +703,8 @@ fi
 # Final cleanup message
 log INFO "Backup process completed successfully!"
 
+# Final success message
 echo "======================================================================"
-log SUCCESS "Backup process completed successfully at $(date)"
+echo "SUCCESS: Backup process completed successfully at $(date)"
+echo "Total execution time: $(( $(date +%s) - START_TIME )) seconds"
 echo "======================================================================"
