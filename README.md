@@ -133,6 +133,7 @@ export VGX_DB_USERS="backup_user"
 | `VGX_DB_OPATH` | `"$HOME/DBBackup/"` | Local backup directory |
 | `VGX_DB_PORTS` | `"3306"` | Database ports (comma-separated) |
 | `VGX_DB_DELETE_LOCAL_BACKUPS` | `"true"` | Delete local files after upload |
+| `VGX_DB_INCREMENTAL_BACKUPS` | `"true"` | Skip unchanged databases (incremental backups) |
 | `VGX_DB_GIT_RETENTION_DAYS` | `"-1"` | Git backup retention (-1=never delete) |
 | `VGX_DB_S3_PREFIX` | `"backups/"` | S3 folder prefix |
 | `VGX_DB_S3_REGION` | `"us-east-1"` | S3 region |
@@ -405,6 +406,28 @@ MAILTO=admin@example.com
 0 2 * * * /usr/local/bin/BackupDB.sh
 ```
 
+### Method 3: Direct from GitHub (No Installation Required)
+```bash
+# Edit crontab
+crontab -e
+```
+
+Add environment variables and run script directly from GitHub:
+```bash
+# Environment variables
+VGX_DB_STORAGE_TYPE=s3
+AWS_ACCESS_KEY_ID=your-access-key
+AWS_SECRET_ACCESS_KEY=your-secret-key
+VGX_DB_S3_BUCKET=production-backups
+VGX_DB_HOSTS=db1.example.com
+VGX_DB_USERS=backup_user
+VGX_DB_PASSWORDS=secure_password
+
+# Daily backup at 2 AM - runs directly from GitHub
+MAILTO=admin@example.com
+0 2 * * * curl -s https://raw.githubusercontent.com/VijendraMalhotra/BackupDB/main/BackupDB.sh | /bin/bash >> /var/log/backup.log 2>&1
+```
+
 ### Method 3: Systemd Timer (Linux)
 ```bash
 # Create service file
@@ -490,6 +513,11 @@ grep "ERROR\|FAILED" /var/log/backup.log | tail -10
 - **Default Cleanup Enabled**: Local backup cleanup now defaults to `true`
 - **Git Retention Control**: New `VGX_DB_GIT_RETENTION_DAYS` variable
 - **Flexible Retention**: Set days to keep, 0 to delete all, -1 to never delete
+
+### 📈 **Incremental Backup Support**
+- **Smart Backups**: Skip unchanged databases automatically
+- **Storage Savings**: Only backup databases that have changed since yesterday
+- **New Variable**: `VGX_DB_INCREMENTAL_BACKUPS` (default: `true`)
 
 ### ⚠️ **Breaking Changes**
 - Local backup cleanup now enabled by default - set `VGX_DB_DELETE_LOCAL_BACKUPS="false"` to disable
