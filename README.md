@@ -46,15 +46,15 @@
 ### Method 1: Download & Configure (Recommended)
 ```bash
 # Download the script
-wget https://raw.githubusercontent.com/VijendraMalhotra/BackupDB/main/BackupDB.sh
+wget https://raw.githubusercontent.com/VGXConsulting/BackupDB/main/BackupDB.sh
 # OR
-curl -O https://raw.githubusercontent.com/VijendraMalhotra/BackupDB/main/BackupDB.sh
+curl -O https://raw.githubusercontent.com/VGXConsulting/BackupDB/main/BackupDB.sh
 
 # Make executable
 chmod +x BackupDB.sh
 
 # Download sample configuration
-wget https://raw.githubusercontent.com/VijendraMalhotra/BackupDB/main/BackupDB.sample.env
+wget https://raw.githubusercontent.com/VGXConsulting/BackupDB/main/BackupDB.sample.env
 cp BackupDB.sample.env BackupDB.env
 
 # Edit configuration
@@ -66,7 +66,7 @@ nano BackupDB.env  # or vim, code, etc.
 
 ### Method 2: Git Clone
 ```bash
-git clone https://github.com/VijendraMalhotra/BackupDB.git
+git clone https://github.com/VGXConsulting/BackupDB.git
 cd BackupDB
 cp BackupDB.sample.env BackupDB.env
 nano BackupDB.env  # Configure your settings
@@ -321,17 +321,17 @@ ssh -T git@github.com
 ### One-liner Download & Run
 ```bash
 # Download, configure, and run in one go
-curl -s https://raw.githubusercontent.com/VijendraMalhotra/BackupDB/main/BackupDB.sh | bash -s -- --help
+curl -s https://raw.githubusercontent.com/VGXConsulting/BackupDB/main/BackupDB.sh | bash -s -- --help
 
 # Or with wget
-wget -q -O - https://raw.githubusercontent.com/VijendraMalhotra/BackupDB/main/BackupDB.sh | bash -s -- --help
+wget -q -O - https://raw.githubusercontent.com/VGXConsulting/BackupDB/main/BackupDB.sh | bash -s -- --help
 ```
 
 ### Download & Configure
 ```bash
 # Download script and sample config
-curl -O https://raw.githubusercontent.com/VijendraMalhotra/BackupDB/main/BackupDB.sh
-curl -O https://raw.githubusercontent.com/VijendraMalhotra/BackupDB/main/BackupDB.sample.env
+curl -O https://raw.githubusercontent.com/VGXConsulting/BackupDB/main/BackupDB.sh
+curl -O https://raw.githubusercontent.com/VGXConsulting/BackupDB/main/BackupDB.sample.env
 chmod +x BackupDB.sh
 
 # Configure
@@ -350,7 +350,7 @@ export VGX_DB_STORAGE_TYPE="s3"
 export AWS_ACCESS_KEY_ID="your-key"
 export VGX_DB_S3_BUCKET="your-bucket"
 # ... other variables ...
-curl -s https://raw.githubusercontent.com/VijendraMalhotra/BackupDB/main/BackupDB.sh | bash
+curl -s https://raw.githubusercontent.com/VGXConsulting/BackupDB/main/BackupDB.sh | bash
 ```
 
 ## ⏰ Automation & Cron Jobs
@@ -425,7 +425,7 @@ VGX_DB_PASSWORDS=secure_password
 
 # Daily backup at 2 AM - runs directly from GitHub
 MAILTO=admin@example.com
-0 2 * * * curl -s https://raw.githubusercontent.com/VijendraMalhotra/BackupDB/main/BackupDB.sh | /bin/bash >> /var/log/backup.log 2>&1
+0 2 * * * curl -s https://raw.githubusercontent.com/VGXConsulting/BackupDB/main/BackupDB.sh | /bin/bash >> /var/log/backup.log 2>&1
 ```
 
 ### Method 3: Systemd Timer (Linux)
@@ -540,5 +540,5 @@ See [RELEASE_NOTES.md](RELEASE_NOTES.md) for version history and [BackupDB.sampl
 
 **Version:** 6.7 (August 2025)  
 **Author:** VGX Consulting by Vijendra Malhotra  
-**Repository:** https://github.com/VijendraMalhotra/BackupDB  
+**Repository:** https://github.com/VGXConsulting/BackupDB  
 **Support:** support.backupdb@vgx.email
