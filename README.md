@@ -6,6 +6,12 @@
 [![Storage](https://img.shields.io/badge/storage-Git%20%7C%20S3%20%7C%20OneDrive-green.svg)](#storage-backends)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey.svg)](#supported-platforms)
 
+
+
+## 🆕 What's New
+
+For complete version history and migration guides, see **[RELEASE_NOTES.md](RELEASE_NOTES.md)**
+
 ## 📦 Installation
 
 ### Download Script and Sample Configuration
@@ -145,13 +151,8 @@ Storage Location/
 - Verify database credentials and network access
 - Test: `mysql -h host -u user -p`
 
-## 🆕 What's New
+## 📖 Settings Documentation
 
-For complete version history and migration guides, see **[RELEASE_NOTES.md](RELEASE_NOTES.md)**
-
-## 📖 Documentation
-
-- **[Release Notes](RELEASE_NOTES.md)** - Version history and migration guides
 - **[Sample Configuration](BackupDB.sample.env)** - Complete configuration template
 
 ---
