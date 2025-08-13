@@ -139,6 +139,13 @@ else
     DB_PASSWORDS=("password")
 fi
 
+# Parse database ports
+if [[ -n "$VGX_DB_PORTS" ]]; then
+    IFS=',' read -ra DB_PORTS <<< "$VGX_DB_PORTS"
+else
+    DB_PORTS=("3306")
+fi
+
 # Date variables
 TODAY=$(date +%Y%m%d)
 if [[ "$OSTYPE" == "darwin"* ]]; then
@@ -238,6 +245,7 @@ QUICK SETUP:
 
   Database:
     export VGX_DB_HOSTS="db1.com,db2.com"
+    export VGX_DB_PORTS="3306,3307"             # Optional: defaults to 3306 for each host
     export VGX_DB_USERS="user1,user2"
     export VGX_DB_PASSWORDS="pass1,pass2"
 
@@ -269,6 +277,7 @@ BACKBLAZE B2 EXAMPLE:
     AWS_SECRET_ACCESS_KEY=your-secret-key
     VGX_DB_S3_ENDPOINT_URL=https://s3.amazonaws.com
     VGX_DB_HOSTS=db1.example.com,db2.example.com
+    VGX_DB_PORTS=3306,3307
     VGX_DB_USERS=backup_user1,backup_user2
     VGX_DB_PASSWORDS=secret1,secret2
     VGX_DB_DELETE_LOCAL_BACKUPS=false
@@ -406,7 +415,7 @@ validate_database() {
             local host="${DB_HOSTS[$i]}"
             local user="${DB_USERS[$i]}"
             local password="${DB_PASSWORDS[$i]}"
-            local port="3306"  # Default MySQL port
+            local port="${DB_PORTS[$i]:-3306}"  # Use configured port or default to 3306
             
             log INFO "Testing connection to database: $host"
             if ! mysql -h "$host" -P "$port" -u "$user" -p"$password" -e "SELECT 1;" >/dev/null 2>&1; then
@@ -582,7 +591,7 @@ run_backups() {
         local host="${DB_HOSTS[$i]}"
         local user="${DB_USERS[$i]}"
         local password="${DB_PASSWORDS[$i]}"
-        local port="3306"  # Default MySQL port
+        local port="${DB_PORTS[$i]:-3306}"  # Use configured port or default to 3306
         
         log INFO "Processing database host: $host"
         
@@ -708,3 +717,7 @@ echo "======================================================================"
 echo "SUCCESS: Backup process completed successfully at $(date)"
 echo "Total execution time: $(( $(date +%s) - START_TIME )) seconds"
 echo "======================================================================"
+
+# Force output flush for cron environments
+exec 1>&1 2>&2
+sleep 0.1
