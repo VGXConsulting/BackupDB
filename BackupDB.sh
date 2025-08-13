@@ -417,10 +417,20 @@ validate_database() {
             local password="${DB_PASSWORDS[$i]}"
             local port="${DB_PORTS[$i]:-3306}"  # Use configured port or default to 3306
             
-            log INFO "Testing connection to database: $host"
-            if ! mysql -h "$host" -P "$port" -u "$user" -p"$password" -e "SELECT 1;" >/dev/null 2>&1; then
-                log ERROR "Cannot connect to database: $host"
-                return 1
+            log INFO "Testing connection to database: $host:$port (user: $user)"
+            
+            # Test connection with detailed error output in debug mode
+            if [[ "$DEBUG_MODE" == "true" ]]; then
+                log INFO "Debug: mysql -h '$host' -P '$port' -u '$user' -p'***' -e 'SELECT 1;'"
+                if ! mysql -h "$host" -P "$port" -u "$user" -p"$password" -e "SELECT 1;" 2>&1; then
+                    log ERROR "Connection failed to $host:$port with user '$user'"
+                    return 1
+                fi
+            else
+                if ! mysql -h "$host" -P "$port" -u "$user" -p"$password" -e "SELECT 1;" >/dev/null 2>&1; then
+                    log ERROR "Connection failed to $host:$port with user '$user'. Run with --debug for details."
+                    return 1
+                fi
             fi
         done
         log SUCCESS "All database connections successful!"
@@ -593,11 +603,11 @@ run_backups() {
         local password="${DB_PASSWORDS[$i]}"
         local port="${DB_PORTS[$i]:-3306}"  # Use configured port or default to 3306
         
-        log INFO "Processing database host: $host"
+        log INFO "Processing database host: $host:$port (user: $user)"
         
         # Test connection
         if ! mysql -h "$host" -P "$port" -u "$user" -p"$password" -e "SELECT 1;" >/dev/null 2>&1; then
-            log ERROR "Cannot connect to database: $host"
+            log ERROR "Cannot connect to database: $host:$port with user '$user'"
             continue
         fi
         
