@@ -1,18 +1,19 @@
 #!/bin/bash
+set -euo pipefail
 ###############################################################################
 # Database Backup Script - Simplified & Optimized
 # Copyright (c) 2025 VGX Consulting by Vijendra Malhotra. All rights reserved.
 # https://vgx.digital
-# 
-# Version: 6.8
-# Modified: August 6, 2025
+#
+# Version: 6.9
+# Modified: September 17, 2025
 #
 # DESCRIPTION:
 # Automated MySQL database backups with multi-storage backend support.
 # Supports Git repositories, AWS S3, S3-compatible storage, and OneDrive.
 #
 # QUICK START:
-# 1. Set storage type: export VGX_DB_STORAGE_TYPE="git|s3|onedrive" 
+# 1. Set storage type: export VGX_DB_STORAGE_TYPE="git|s3|onedrive"
 # 2. Configure credentials (see --help for details)
 # 3. Set database connection: export VGX_DB_HOSTS="host1,host2"
 # 4. Run: ./BackupDB.sh
@@ -32,15 +33,15 @@ log() {
     local level=$1
     shift
     local message="$*"
-    
+
     # In production mode (not test/debug mode), only show WARN and ERROR
-    if [[ "$TEST_MODE" != "true" && "$DEBUG_MODE" != "true" && "$level" != "ERROR" && "$level" != "WARN" ]]; then
+    if [[ "${TEST_MODE:-false}" != "true" && "${DEBUG_MODE:-false}" != "true" && "$level" != "ERROR" && "$level" != "WARN" ]]; then
         return 0
     fi
-    
+
     case $level in
-        "ERROR")   echo -e "${RED}[ERROR] $message${NC}" ;;
-        "WARN")    echo -e "${YELLOW}[WARN] $message${NC}" ;;
+        "ERROR")   echo -e "${RED}[ERROR] $message${NC}" >&2 ;;
+        "WARN")    echo -e "${YELLOW}[WARN] $message${NC}" >&2 ;;
         "SUCCESS") echo -e "${GREEN}[SUCCESS] $message${NC}" ;;
         "INFO")    echo "[INFO] $message" ;;
         *)         echo "[$level] $message" ;;
@@ -55,26 +56,10 @@ log() {
 load_env_file() {
     local env_file="$1"
     if [[ -f "$env_file" ]]; then
-        # Export variables from .env file, ignoring comments and empty lines
-        while IFS= read -r line; do
-            # Skip empty lines and comments
-            [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
-            
-            # Process export statements and direct variable assignments
-            if [[ "$line" =~ ^[[:space:]]*(export[[:space:]]+)?([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]]; then
-                local var_name="${BASH_REMATCH[2]}"
-                local var_value="${BASH_REMATCH[3]}"
-                
-                # Remove surrounding quotes if present
-                var_value=$(echo "$var_value" | sed -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'$//")
-                
-                # Expand variables like $HOME
-                var_value=$(eval echo "$var_value")
-                
-                # Export the variable
-                export "$var_name"="$var_value"
-            fi
-        done < "$env_file"
+        set -a
+        # shellcheck source=/dev/null
+        source "$env_file"
+        set +a
         return 0
     fi
     return 1
@@ -88,7 +73,7 @@ load_env_file "./BackupDB.env" || load_env_file "$HOME/BackupDB.env" || true
 #########################
 
 # Script defaults
-VERSION="6.8"
+VERSION="6.9"
 SCRIPT_NAME="BackupDB"
 GITHUB_REPO="https://raw.githubusercontent.com/VGXConsulting/BackupDB/refs/heads/main/BackupDB.sh"
 
@@ -106,6 +91,9 @@ GIT_RETENTION_DAYS=${VGX_DB_GIT_RETENTION_DAYS:-"-1"}
 
 # Incremental backups (skip if no changes detected)
 INCREMENTAL_BACKUPS=${VGX_DB_INCREMENTAL_BACKUPS:-"true"}
+
+# Number of parallel backup jobs
+MAX_PARALLEL_JOBS=${VGX_DB_MAX_PARALLEL_JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)}
 
 # Git configuration
 GIT_REPO=${VGX_DB_GIT_REPO:-"git@github.com:YourUsername/DBBackups.git"}
@@ -197,7 +185,7 @@ check_for_updates() {
 # Show script help
 show_help() {
     cat << 'EOF'
-DATABASE BACKUP SCRIPT v6.8 - SIMPLIFIED & OPTIMIZED
+DATABASE BACKUP SCRIPT v6.9 - SIMPLIFIED & OPTIMIZED
 
 USAGE:
   ./BackupDB.sh [OPTIONS]
@@ -249,6 +237,9 @@ QUICK SETUP:
     export VGX_DB_USERS="user1,user2"
     export VGX_DB_PASSWORDS="pass1,pass2"
 
+  Performance:
+    export VGX_DB_MAX_PARALLEL_JOBS=4             # Number of parallel DB backups (default: number of CPU cores)
+
   Cleanup Settings:
     export VGX_DB_DELETE_LOCAL_BACKUPS="false"      # Delete local backups after upload (default: true)
     export VGX_DB_GIT_RETENTION_DAYS="7"            # Git backup retention in days (default: -1 = never delete)
@@ -282,6 +273,7 @@ BACKBLAZE B2 EXAMPLE:
     VGX_DB_PASSWORDS=secret1,secret2
     VGX_DB_DELETE_LOCAL_BACKUPS=false
     VGX_DB_GIT_RETENTION_DAYS=30
+    VGX_DB_MAX_PARALLEL_JOBS=4
 
   Then simply run: ./BackupDB.sh
 EOF
@@ -298,11 +290,12 @@ show_config() {
     log INFO "Configuration Summary:"
     echo "  Storage Type: $STORAGE_TYPE"
     echo "  Backup Directory: $BACKUP_DIR"
+    echo "  Parallel Jobs: $MAX_PARALLEL_JOBS"
     
     case $STORAGE_TYPE in
         "git")
             echo "  Git Repository: $GIT_REPO"
-            ;;
+            ;; 
         "s3")
             echo "  S3 Bucket: $S3_BUCKET"
             echo "  S3 Prefix: $S3_PREFIX"
@@ -311,11 +304,11 @@ show_config() {
             else
                 echo "  S3 Endpoint: AWS Default"
             fi
-            ;;
+            ;; 
         "onedrive")
             echo "  OneDrive Remote: $ONEDRIVE_REMOTE"
             echo "  OneDrive Path: $ONEDRIVE_PATH"
-            ;;
+            ;; 
     esac
     
     echo "  Database Hosts: ${DB_HOSTS[*]}"
@@ -354,7 +347,7 @@ validate_storage() {
                     return 1
                 fi
             fi
-            ;;
+            ;; 
         "s3")
             check_command aws || return 1
             if [[ -z "$S3_BUCKET" ]]; then
@@ -373,7 +366,7 @@ validate_storage() {
                     return 1
                 fi
             fi
-            ;;
+            ;; 
         "onedrive")
             check_command rclone || return 1
             if [[ -z "$ONEDRIVE_REMOTE" ]]; then
@@ -388,11 +381,11 @@ validate_storage() {
                     return 1
                 fi
             fi
-            ;;
+            ;; 
         *)
             log ERROR "Unsupported storage type: $STORAGE_TYPE"
             return 1
-            ;;
+            ;; 
     esac
 }
 
@@ -402,6 +395,7 @@ validate_database() {
     
     check_command mysql || return 1
     check_command mysqldump || return 1
+    check_command sha256sum || return 1
     
     if [[ ${#DB_HOSTS[@]} -ne ${#DB_USERS[@]} ]] || [[ ${#DB_HOSTS[@]} -ne ${#DB_PASSWORDS[@]} ]]; then
         log ERROR "Database configuration mismatch. Hosts, users, and passwords arrays must have same length."
@@ -420,8 +414,8 @@ validate_database() {
             log INFO "Testing connection to database: $host:$port (user: $user)"
             
             # Test connection with detailed error output in debug mode
-            if [[ "$DEBUG_MODE" == "true" ]]; then
-                log INFO "Debug: mysql -h '$host' -P '$port' -u '$user' -p'***' -e 'SELECT 1;'"
+            if [[ "${DEBUG_MODE:-false}" == "true" ]]; then
+                log INFO "Debug: mysql -h '$host' -P '$port' -u '$user' -p'***' -e 'SELECT 1;'
                 if ! mysql -h "$host" -P "$port" -u "$user" -p"$password" -e "SELECT 1;" 2>&1; then
                     log ERROR "Connection failed to $host:$port with user '$user'"
                     return 1
@@ -441,8 +435,8 @@ validate_database() {
 validate_config() {
     local test_connection=${1:-false}
     log INFO "Validating configuration..."
-    validate_storage "$test_connection" || return 1
-    validate_database "$test_connection" || return 1
+    validate_storage "$test_connection"
+    validate_database "$test_connection"
     log SUCCESS "Configuration validation passed!"
 }
 
@@ -462,14 +456,14 @@ upload_git() {
         cd "$backup_path" && git pull || true
     fi
     
-    cd "$backup_path" || return 1
+    cd "$backup_path"
     
     # Check for changes
     if git status --porcelain | grep -q '.'; then
         log INFO "Changes detected. Committing..."
         git add .
         git commit -m "Database backup: $TODAY"
-        git push origin "$(git rev-parse --abbrev-ref HEAD)" || return 1
+        git push origin "$(git rev-parse --abbrev-ref HEAD)"
         log SUCCESS "Git upload completed."
         cleanup_local_backups
     else
@@ -484,19 +478,15 @@ upload_s3() {
     
     log INFO "Uploading to S3 storage..."
     
-    cd "$backup_path" || return 1
+    cd "$backup_path"
     
     # Upload all .gz files recursively to S3
     local s3_target="s3://$S3_BUCKET/${S3_PREFIX}${TODAY}/"
     log INFO "AWS Command: aws s3 cp . \"$s3_target\" --recursive --endpoint-url=\"$S3_ENDPOINT\""
     
-    if aws_cmd s3 cp . "$s3_target" --recursive; then
-        log SUCCESS "S3 upload completed."
-        cleanup_local_backups
-    else
-        log ERROR "S3 upload failed."
-        return 1
-    fi
+    aws_cmd s3 cp . "$s3_target" --recursive
+    log SUCCESS "S3 upload completed."
+    cleanup_local_backups
 }
 
 # Upload to OneDrive
@@ -509,15 +499,13 @@ upload_onedrive() {
     
     find "$backup_path" -name "*.gz" -type f | while read -r file; do
         local relative_path="${file#$backup_path/}"
-        local target_dir=$(dirname "$target_path/$relative_path")
+        local target_dir
+        target_dir=$(dirname "$target_path/$relative_path")
         
         rclone mkdir "$target_dir" 2>/dev/null || true
         
         log INFO "Uploading: $relative_path"
-        if ! rclone copy "$file" "$target_dir"; then
-            log ERROR "Failed to upload: $relative_path"
-            return 1
-        fi
+        rclone copy "$file" "$target_dir"
     done
     
     log SUCCESS "OneDrive upload completed."
@@ -529,10 +517,10 @@ upload_backups() {
     local backup_path="$1"
     
     case $STORAGE_TYPE in
-        "git")      upload_git "$backup_path" ;;
-        "s3")       upload_s3 "$backup_path" ;;
-        "onedrive") upload_onedrive "$backup_path" ;;
-        *)          log ERROR "Unknown storage type: $STORAGE_TYPE"; return 1 ;;
+        "git")      upload_git "$backup_path" ;; 
+        "s3")       upload_s3 "$backup_path" ;; 
+        "onedrive") upload_onedrive "$backup_path" ;; 
+        *)          log ERROR "Unknown storage type: $STORAGE_TYPE"; return 1 ;; 
     esac
 }
 
@@ -567,16 +555,17 @@ backup_database() {
     if [[ "$INCREMENTAL_BACKUPS" == "true" ]]; then
         local yesterday_file="${backup_path}/${YESTERDAY}_${db}.sql.gz"
         if [[ -f "$yesterday_file" ]]; then
-            log INFO "Comparing with yesterday's backup..."
-            gunzip -c "$yesterday_file" > "${backup_path}/${YESTERDAY}_${db}.sql"
+            log INFO "Comparing with yesterday's backup for $db..."
+            local current_hash
+            current_hash=$(sha256sum "$backup_file" | awk '{print $1}')
+            local yesterday_hash
+            yesterday_hash=$(gunzip -c "$yesterday_file" | sha256sum | awk '{print $1}')
             
-            if diff -q "${backup_path}/${YESTERDAY}_${db}.sql" "$backup_file" >/dev/null; then
+            if [[ "$current_hash" == "$yesterday_hash" ]]; then
                 log INFO "No changes detected in $db, skipping."
-                rm -f "$backup_file" "${backup_path}/${YESTERDAY}_${db}.sql"
+                rm -f "$backup_file"
                 return 2  # Special code for "no changes"
             fi
-            
-            rm -f "${backup_path}/${YESTERDAY}_${db}.sql"
         fi
     fi
     
@@ -589,6 +578,11 @@ backup_database() {
 run_backups() {
     local backup_path="$1"
     mkdir -p "$backup_path"
+
+    # Create a temporary directory for exit codes
+    local exit_code_dir
+    exit_code_dir=$(mktemp -d)
+    trap 'rm -rf "$exit_code_dir"' EXIT
     
     # Clean up old Git backups based on retention policy
     if [[ "$STORAGE_TYPE" == "git" && "$GIT_RETENTION_DAYS" -ge 0 ]]; then
@@ -616,15 +610,27 @@ run_backups() {
         databases=$(mysql -h "$host" -P "$port" -u "$user" -p"$password" -e "SHOW DATABASES;" 2>/dev/null | \
                    tail -n +2 | grep -Ev "mysql|information_schema|performance_schema|sys")
         
-        # Backup each database
-        for db in $databases; do
-            backup_database "$host" "$port" "$user" "$password" "$db" "$backup_path"
-            case $? in
-                0) ;; # Success, continue
-                2) ;; # No changes detected, continue  
-                *) log ERROR "Failed to backup database: $db"; return 1 ;;
-            esac
+        # Export functions and variables for subshell
+        export -f backup_database log
+        export TODAY YESTERDAY INCREMENTAL_BACKUPS
+
+        # Backup each database in parallel
+        echo "$databases" | xargs -P "$MAX_PARALLEL_JOBS" -I {} bash -c 
+            "backup_database '$host' '$port' '$user' '$password' '{}' '$backup_path'; echo $? > '$exit_code_dir'/{}.exit_code"
+
+        # Check for failures
+        for exit_code_file in "$exit_code_dir"/*.exit_code; do
+            local exit_code
+            exit_code=$(cat "$exit_code_file")
+            if [[ "$exit_code" -ne 0 && "$exit_code" -ne 2 ]]; then
+                local db_name
+                db_name=$(basename "$exit_code_file" .exit_code)
+                log ERROR "Failed to backup database: $db_name (exit code: $exit_code)"
+                return 1
+            fi
         done
+        # Clean up for next host
+        rm -f "$exit_code_dir"/*
     done
 }
 
@@ -635,12 +641,12 @@ run_backups() {
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
-        -h|--help)    show_help; exit 0 ;;
-        -v|--version) show_version; exit 0 ;;
-        -t|--test)    TEST_MODE=true; shift ;;
-        -d|--debug)   DEBUG_MODE=true; shift ;;
-        --dry-run)    DRY_RUN=true; shift ;;
-        *)            log ERROR "Unknown option: $1"; show_help; exit 1 ;;
+        -h|--help)    show_help; exit 0 ;; 
+        -v|--version) show_version; exit 0 ;; 
+        -t|--test)    TEST_MODE=true; shift ;; 
+        -d|--debug)   DEBUG_MODE=true; shift ;; 
+        --dry-run)    DRY_RUN=true; shift ;; 
+        *)            log ERROR "Unknown option: $1"; show_help; exit 1 ;; 
     esac
 done
 
@@ -664,24 +670,18 @@ show_config
 echo
 
 # Validate configuration
-if ! validate_config; then
-    log ERROR "Configuration validation failed. Use --help for setup instructions."
-    exit 1
-fi
+validate_config
 
 # Test mode - just validate and exit
-if [[ "$TEST_MODE" == "true" ]]; then
+if [[ "${TEST_MODE:-false}" == "true" ]]; then
     log INFO "Running connection tests..."
-    if ! validate_config true; then
-        log ERROR "Configuration test failed."
-        exit 1
-    fi
+    validate_config true
     log SUCCESS "Configuration test passed! Ready for backups."
     exit 0
 fi
 
 # Dry run mode
-if [[ "$DRY_RUN" == "true" ]]; then
+if [[ "${DRY_RUN:-false}" == "true" ]]; then
     log INFO "DRY RUN MODE - No actual backups will be performed"
     log INFO "Would backup databases from: ${DB_HOSTS[*]}"
     log INFO "Would upload to: $STORAGE_TYPE"
@@ -700,24 +700,15 @@ if [[ "$STORAGE_TYPE" == "git" ]]; then
     
     if [[ ! -d "$BACKUP_DIR/.git" ]]; then
         log INFO "Cloning Git repository..."
-        git clone "$GIT_REPO" "$BACKUP_DIR" || {
-            log ERROR "Failed to clone Git repository."
-            exit 1
-        }
+        git clone "$GIT_REPO" "$BACKUP_DIR"
     fi
 fi
 
 # Create backups
-if ! run_backups "$BACKUP_DIR"; then
-    log ERROR "Backup process failed."
-    exit 1
-fi
+run_backups "$BACKUP_DIR"
 
 # Upload backups
-if ! upload_backups "$BACKUP_DIR"; then
-    log ERROR "Upload process failed."
-    exit 1
-fi
+upload_backups "$BACKUP_DIR"
 
 # Final cleanup message
 log INFO "Backup process completed successfully!"

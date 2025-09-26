@@ -4,6 +4,30 @@ A comprehensive database backup script with multi-storage backend support, autom
 
 ---
 
+## Version 6.9 (September 17, 2025) - Parallel Backups & Performance Optimizations
+
+### 🚀 Major Features
+- **Parallel Database Backups**: Back up multiple databases on the same host concurrently, significantly speeding up the process.
+- **Configurable Parallelism**: New `VGX_DB_MAX_PARALLEL_JOBS` environment variable to control the number of parallel jobs (defaults to the number of CPU cores).
+- **Efficient Incremental Backups**: Uses SHA256 checksums instead of `diff` to detect database changes, resulting in faster and more memory-efficient incremental backups.
+
+### ⚙️ New Environment Variables
+```bash
+VGX_DB_MAX_PARALLEL_JOBS=4  # Set the number of parallel backup jobs
+```
+
+### 🔧 Technical Improvements
+- **Robust Error Handling**: Implemented stricter error handling with `set -e` and `set -o pipefail`.
+- **Parallel Job Error Reporting**: Ensures that failures in any parallel backup job are correctly reported, and the script exits with a non-zero status code.
+- **Simplified `.env` Loading**: The function for loading `.env` files has been simplified and made more efficient.
+
+### 💡 Benefits
+- **Faster Backups**: Parallel execution dramatically reduces the time it takes to back up multiple databases.
+- **Improved Performance**: Checksum-based incremental backups are faster and use less memory, especially for large databases.
+- **Greater Reliability**: Stricter error handling makes the script more robust and reliable.
+
+---
+
 ## Version 6.7 (August 6, 2025) - Enhanced Cleanup Features
 
 ### 🚀 New Features

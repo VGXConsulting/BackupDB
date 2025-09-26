@@ -2,7 +2,7 @@
 
 **Simple, automated MySQL backups to Git, S3, or OneDrive**
 
-[![Version](https://img.shields.io/badge/version-6.7-blue.svg)](RELEASE_NOTES.md)
+[![Version](https://img.shields.io/badge/version-6.9-blue.svg)](RELEASE_NOTES.md)
 [![Storage](https://img.shields.io/badge/storage-Git%20%7C%20S3%20%7C%20OneDrive-green.svg)](#storage-backends)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey.svg)](#supported-platforms)
 
@@ -70,6 +70,7 @@ Edit `BackupDB.env` with your settings. The script automatically loads this file
 | `VGX_DB_INCREMENTAL_BACKUPS` | `"true"` | Skip unchanged databases |
 | `VGX_DB_DELETE_LOCAL_BACKUPS` | `"true"` | Delete local files after upload |
 | `VGX_DB_GIT_RETENTION_DAYS` | `"-1"` | Git backup retention (-1=keep all) |
+| `VGX_DB_MAX_PARALLEL_JOBS` | CPU cores | Number of parallel DB backups |
 
 ## ⏰ Automation (Cron)
 
