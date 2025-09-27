@@ -415,7 +415,7 @@ validate_database() {
             
             # Test connection with detailed error output in debug mode
             if [[ "${DEBUG_MODE:-false}" == "true" ]]; then
-                log INFO "Debug: mysql -h '$host' -P '$port' -u '$user' -p'***' -e 'SELECT 1;'
+                log INFO "Debug: mysql -h '$host' -P '$port' -u '$user' -p'***' -e 'SELECT 1;'"
                 if ! mysql -h "$host" -P "$port" -u "$user" -p"$password" -e "SELECT 1;" 2>&1; then
                     log ERROR "Connection failed to $host:$port with user '$user'"
                     return 1
@@ -580,9 +580,8 @@ run_backups() {
     mkdir -p "$backup_path"
 
     # Create a temporary directory for exit codes
-    local exit_code_dir
     exit_code_dir=$(mktemp -d)
-    trap 'rm -rf "$exit_code_dir"' EXIT
+    trap 'rm -rf "$exit_code_dir" 2>/dev/null || true' EXIT
     
     # Clean up old Git backups based on retention policy
     if [[ "$STORAGE_TYPE" == "git" && "$GIT_RETENTION_DAYS" -ge 0 ]]; then
@@ -612,11 +611,11 @@ run_backups() {
         
         # Export functions and variables for subshell
         export -f backup_database log
-        export TODAY YESTERDAY INCREMENTAL_BACKUPS
+        export TODAY YESTERDAY INCREMENTAL_BACKUPS RED YELLOW GREEN NC
 
         # Backup each database in parallel
-        echo "$databases" | xargs -P "$MAX_PARALLEL_JOBS" -I {} bash -c 
-            "backup_database '$host' '$port' '$user' '$password' '{}' '$backup_path'; echo $? > '$exit_code_dir'/{}.exit_code"
+        echo "$databases" | xargs -P "$MAX_PARALLEL_JOBS" -I {} bash -c \
+            "backup_database '$host' '$port' '$user' '$password' '{}' '$backup_path'; echo \$? > '$exit_code_dir'/{}.exit_code"
 
         # Check for failures
         for exit_code_file in "$exit_code_dir"/*.exit_code; do
